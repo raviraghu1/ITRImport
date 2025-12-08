@@ -1,11 +1,16 @@
 # Implementation Plan: ITR Economics Data Import & Analysis System
 
 **Branch**: `main` | **Date**: 2025-12-08 | **Spec**: [spec.md](./spec.md)
-**Status**: Implemented (v2.1.0)
+**Status**: Implemented (v3.0.0)
 
 ## Summary
 
-Comprehensive data extraction system for ITR Economics Trends Report PDFs, featuring PyMuPDF-based parsing, Azure OpenAI GPT-4 enhancement, MongoDB storage with consolidated documents, and multi-format reporting.
+Comprehensive data extraction system for ITR Economics Trends Report PDFs, featuring:
+- **PyMuPDF-based parsing** with flow-based document structure
+- **Azure OpenAI GPT-4 Vision** for chart interpretation (665 charts analyzed)
+- **MongoDB storage** with consolidated and flow-based collections
+- **Automated workflow** with file watcher for continuous processing
+- **Multi-format reporting** (JSON, CSV, TXT)
 
 ## Technical Context
 
@@ -48,22 +53,26 @@ specs/itr-import/
 
 ```text
 ITRImport/
-├── main.py                    # Basic extraction entry point
+├── workflow.py                # Automated end-to-end workflow (RECOMMENDED)
+├── create_flow_document.py    # Flow-based extraction with vision
 ├── main_enhanced.py           # Enhanced extraction with LLM
 ├── import_to_mongodb.py       # MongoDB import utility
 ├── create_consolidated_docs.py # Consolidated document generator
+├── main.py                    # Basic extraction entry point
 ├── extract_pdf.py             # Simple PDF text extraction utility
 ├── src/
 │   ├── __init__.py
 │   ├── models.py              # Data models (EconomicSeries, ForecastRange, etc.)
 │   ├── parser.py              # Basic PDF parser
 │   ├── enhanced_parser.py     # Enhanced parser with chart/table context
+│   ├── flow_extractor.py      # Flow-based extraction with context preservation
 │   ├── database.py            # MongoDB operations
 │   ├── analyzer.py            # Basic analysis and reporting
 │   ├── enhanced_analyzer.py   # Enhanced analysis with detailed reports
-│   └── llm_extractor.py       # Azure OpenAI GPT-4 integration
+│   └── llm_extractor.py       # Azure OpenAI GPT-4/Vision integration
 ├── output/                    # Generated reports and exports
-│   └── consolidated/          # Consolidated JSON files (one per PDF)
+│   ├── consolidated/          # Consolidated JSON files (one per PDF)
+│   └── flow/                  # Flow-based JSON files with vision interpretations
 ├── Files/                     # Source PDF files
 └── .specify/
     └── memory/
@@ -117,9 +126,17 @@ class BusinessPhase(Enum):
 ### 3. LLM Extractor (`src/llm_extractor.py`)
 
 - Azure OpenAI GPT-4.1 integration via REST API
+- **GPT-4 Vision** for chart image interpretation
 - Structured JSON extraction prompts
 - Fallback handling for API failures
-- Methods: `extract_series_data()`, `extract_forecast_table()`, `extract_executive_summary()`
+- Methods: `extract_series_data()`, `extract_forecast_table()`, `extract_executive_summary()`, `interpret_chart_with_vision()`, `interpret_image()`
+
+### 3.1 Flow Extractor (`src/flow_extractor.py`)
+
+- Preserves PDF reading order (text, charts, tables in sequence)
+- Content blocks with position and sequence tracking
+- Integration with LLM Vision for chart interpretation
+- Creates structured document flow for downstream LLM consumption
 
 ### 4. Database Layer (`src/database.py`)
 
@@ -157,14 +174,15 @@ api_version = "2025-01-01-preview"
 uri = "mongodb+srv://licensing:***@analytics.meugir.mongodb.net/"
 database = "ITRReports"
 collections = [
+    "ITRextract_Flow",      # Flow-based documents with vision interpretations
+    "reports_consolidated", # Single document per PDF (downstream use)
     "reports",              # Report metadata
     "core_series",          # Core economic indicators
     "financial_series",     # Financial market indicators
     "construction_series",  # Construction sector indicators
     "manufacturing_series", # Manufacturing sector indicators
     "charts",               # Chart metadata
-    "forecast_tables",      # Forecast tables
-    "reports_consolidated"  # Single document per PDF (downstream use)
+    "forecast_tables"       # Forecast tables
 ]
 ```
 
@@ -282,6 +300,27 @@ export AZURE_OPENAI_KEY="..."
 
 ### Execution
 ```bash
+# === RECOMMENDED: Automated Workflow ===
+
+# Process a single PDF through complete workflow
+python workflow.py --pdf "Files/TR Complete March 2024.pdf"
+
+# Process all PDFs in a directory
+python workflow.py --dir Files/
+
+# Watch directory for new PDFs (continuous monitoring)
+python workflow.py --watch Files/
+
+# === Flow Document Creation (with Vision Analysis) ===
+
+# Create flow documents for all PDFs
+python create_flow_document.py
+
+# Single PDF with vision analysis
+python create_flow_document.py --pdf "Files/report.pdf"
+
+# === Step-by-Step Processing ===
+
 # Full processing
 python main_enhanced.py
 
@@ -300,21 +339,32 @@ python create_consolidated_docs.py
 
 ## Metrics & Monitoring
 
-### Current Results (v2.1.0)
+### Current Results (v3.0.0)
 
 | Metric | Value |
 |--------|-------|
 | PDFs Processed | 5 |
-| Series Extracted | 118 |
-| Charts Captured | 289 |
-| Forecast Tables | 29 |
-| LLM Enhanced | 118 |
+| Total Pages | 246 |
+| Series Extracted | 117 |
+| Charts with Vision Analysis | 665 |
+| LLM Vision Interpretations | 665 |
+| Flow Documents | 5 |
 | Consolidated Documents | 5 |
-| Total MongoDB Documents | 446 |
-| Processing Time | ~2 min/PDF with LLM |
+| Processing Time (Flow) | ~8-10 min/PDF with Vision |
+
+### Reports Processed
+
+| Report | Period | Pages | Series | Charts | LLM Interpretations |
+|--------|--------|-------|--------|--------|---------------------|
+| DYMAX DEC 2021 ff.pdf | December 2021 | 48 | 9 | 155 | 155 |
+| TR Complete March 2024.pdf | March 2024 | 58 | 31 | 158 | 158 |
+| TR Complete July 2024.pdf | July 2024 | 57 | 34 | 152 | 152 |
+| ITR Webinar July 2021.pdf | July 2021 | 29 | 6 | 134 | 134 |
+| ITR Trends Report November 2025.pdf | November 2025 | 54 | 37 | 66 | 66 |
 
 ### Recommended Monitoring
 - Extraction success rate per PDF
-- LLM API latency and error rate
+- LLM Vision API latency and error rate
 - MongoDB operation latency
 - Series count per sector over time
+- Chart interpretation confidence levels

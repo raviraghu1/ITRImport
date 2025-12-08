@@ -3,11 +3,19 @@
 **Feature Branch**: `main`
 **Created**: 2025-12-08
 **Status**: Implemented
-**Version**: 2.1.0
+**Version**: 3.0.0
 
 ## Overview
 
 ITRImport is a comprehensive data extraction and analysis system for ITR Economics Trends Report PDFs. The system extracts economic indicators, forecasts, charts, and contextual information from PDF reports, stores them in MongoDB, and provides analysis capabilities powered by Azure OpenAI GPT-4.
+
+### Key Capabilities (v3.0.0)
+
+- **Automated Workflow**: End-to-end processing with single command or file watcher
+- **Flow-Based Documents**: Preserve PDF context flow for better LLM understanding
+- **Vision-Based Chart Analysis**: GPT-4 Vision interprets 665 charts with trend analysis
+- **LLM Enhancement**: Intelligent content extraction with Azure OpenAI GPT-4
+- **MongoDB Storage**: Organized by sector with consolidated and flow collections
 
 ## User Scenarios & Testing
 
@@ -124,6 +132,39 @@ As a downstream system developer, I want a single consolidated document per PDF 
 
 ---
 
+### User Story 8 - Flow-Based Documents with Vision Analysis (Priority: P1)
+
+As a downstream LLM system, I want documents that preserve the PDF reading order with AI interpretations of charts so that I can understand economic data in its original context.
+
+**Why this priority**: Critical for downstream LLM consumption - maintains context and provides visual data interpretation.
+
+**Independent Test**: Run `python create_flow_document.py` and verify `ITRextract_Flow` collection contains flow documents with chart interpretations.
+
+**Acceptance Scenarios**:
+
+1. **Given** a PDF with mixed text and charts, **When** flow extraction runs, **Then** content blocks maintain reading order (text before related charts).
+2. **Given** a chart image in the PDF, **When** processed with vision, **Then** interpretation includes trend direction, business cycle phase, and business implications.
+3. **Given** 5 PDFs processed, **When** flow extraction completes, **Then** 665 charts have LLM vision interpretations.
+4. **Given** a flow document, **When** queried, **Then** I can iterate through page-by-page content in sequence.
+
+---
+
+### User Story 9 - Automated Workflow with File Watcher (Priority: P2)
+
+As a data engineer, I want an automated workflow that processes PDFs when uploaded so that I don't need to manually trigger processing.
+
+**Why this priority**: Convenience feature that enables hands-off operation.
+
+**Independent Test**: Run `python workflow.py --watch Files/` and drop a new PDF into the directory.
+
+**Acceptance Scenarios**:
+
+1. **Given** watch mode is running, **When** a new PDF is added to the watched directory, **Then** it is automatically processed through the complete pipeline.
+2. **Given** a PDF to process, **When** `workflow.py --pdf` is run, **Then** extraction, LLM enhancement, MongoDB storage, and consolidation complete in sequence.
+3. **Given** `workflow.py --status`, **When** executed, **Then** it shows database connection status and document counts.
+
+---
+
 ### Edge Cases
 
 - **Corrupted PDF**: System should fail gracefully with clear error message, not crash.
@@ -157,6 +198,13 @@ As a downstream system developer, I want a single consolidated document per PDF 
 - **FR-012**: System MUST use LLM to parse and structure executive summaries.
 - **FR-013**: System MUST gracefully degrade to basic extraction if LLM unavailable.
 
+#### Vision-Based Chart Analysis
+- **FR-031**: System MUST use GPT-4 Vision to interpret chart images.
+- **FR-032**: System MUST extract trend direction (rising/falling/stabilizing) from charts.
+- **FR-033**: System MUST identify business cycle phase (A/B/C/D) from chart patterns.
+- **FR-034**: System MUST provide business implications for each chart interpretation.
+- **FR-035**: System MUST include confidence level for vision interpretations.
+
 #### Data Storage
 - **FR-014**: System MUST store extracted data in MongoDB with sector-specific collections.
 - **FR-015**: System MUST implement idempotent upsert operations using composite keys (series_id + report_period).
@@ -164,6 +212,8 @@ As a downstream system developer, I want a single consolidated document per PDF 
 - **FR-017**: System MUST store report-level metadata including executive summary and page counts.
 - **FR-028**: System MUST create consolidated documents with all data from each PDF in a single document.
 - **FR-029**: System MUST include series index for quick lookup in consolidated documents.
+- **FR-036**: System MUST store flow-based documents in `ITRextract_Flow` collection.
+- **FR-037**: System MUST preserve PDF reading order in flow documents.
 
 #### Output Generation
 - **FR-018**: System MUST generate detailed text reports with executive summary, sector breakdown, and forecasts.
@@ -172,6 +222,12 @@ As a downstream system developer, I want a single consolidated document per PDF 
 - **FR-021**: System MUST generate charts manifest JSON for visualization integration.
 - **FR-022**: System MUST generate forecast tables JSON for downstream processing.
 - **FR-030**: System MUST export consolidated JSON files for each PDF.
+- **FR-038**: System MUST export flow-based JSON files with vision interpretations.
+
+#### Workflow & Automation
+- **FR-039**: System MUST provide automated end-to-end workflow via `workflow.py`.
+- **FR-040**: System MUST support file watcher mode for automatic PDF processing.
+- **FR-041**: System MUST support configurable poll interval for watch mode.
 
 #### CLI Interface
 - **FR-023**: System MUST support processing single PDF via `--pdf` argument.
@@ -261,28 +317,28 @@ As a downstream system developer, I want a single consolidated document per PDF 
 - **SC-009**: Consolidated documents contain 100% of extracted data from source PDF.
 - **SC-010**: Downstream systems can query complete report data with single document fetch.
 
-### Current Performance (v2.1.0)
+### Current Performance (v3.0.0)
 
 | Metric | Result |
 |--------|--------|
 | PDFs Processed | 5 |
-| Total Series Extracted | 118 |
-| Total Charts Captured | 289 |
-| Forecast Tables Extracted | 29 |
-| LLM Enhanced Series | 118 (100%) |
+| Total Pages | 246 |
+| Total Series Extracted | 117 |
+| Charts with Vision Analysis | 665 |
+| LLM Vision Interpretations | 665 |
+| Flow Documents | 5 |
 | Consolidated Documents | 5 |
-| Total MongoDB Documents | 446 |
 | Sectors Covered | 4/4 (Core, Financial, Construction, Manufacturing) |
 
 ### Reports Processed
 
-| Report | Period | Series | Charts | Forecast Tables |
-|--------|--------|--------|--------|-----------------|
-| DYMAX DEC 2021 ff.pdf | December 2021 | 10 | 39 | 0 |
-| TR Complete March 2024.pdf | March 2024 | 32 | 88 | 0 |
-| TR Complete July 2024.pdf | July 2024 | 36 | 102 | 0 |
-| ITR Webinar July 2021.pdf | - | 6 | 26 | 0 |
-| ITR Trends Report November 2025.pdf | November 2025 | 34 | 34 | 29 |
+| Report | Period | Pages | Series | Charts | LLM Interpretations |
+|--------|--------|-------|--------|--------|---------------------|
+| DYMAX DEC 2021 ff.pdf | December 2021 | 48 | 9 | 155 | 155 |
+| TR Complete March 2024.pdf | March 2024 | 58 | 31 | 158 | 158 |
+| TR Complete July 2024.pdf | July 2024 | 57 | 34 | 152 | 152 |
+| ITR Webinar July 2021.pdf | July 2021 | 29 | 6 | 134 | 134 |
+| ITR Trends Report November 2025.pdf | November 2025 | 54 | 37 | 66 | 66 |
 
 ## Configuration
 
@@ -300,7 +356,8 @@ As a downstream system developer, I want a single consolidated document per PDF 
 
 | Collection | Description | Documents |
 |------------|-------------|-----------|
-| `reports_consolidated` | **Single document per PDF for downstream use** | 5 |
+| `ITRextract_Flow` | **Flow-based documents with 665 vision interpretations** | 5 |
+| `reports_consolidated` | Single document per PDF for downstream use | 5 |
 | `reports` | Report metadata and executive summaries | 5 |
 | `core_series` | Core economic indicators | 33 |
 | `financial_series` | Financial market indicators | 26 |
@@ -349,6 +406,33 @@ As a downstream system developer, I want a single consolidated document per PDF 
 ## Usage
 
 ```bash
+# === RECOMMENDED: Automated Workflow ===
+
+# Process a single PDF through complete workflow
+python workflow.py --pdf "Files/TR Complete March 2024.pdf"
+
+# Process all PDFs in a directory
+python workflow.py --dir Files/
+
+# Watch directory for new PDFs (continuous monitoring)
+python workflow.py --watch Files/
+
+# Check workflow status
+python workflow.py --status
+
+# === Flow Document Creation (with Vision Analysis) ===
+
+# Create flow documents for all PDFs
+python create_flow_document.py
+
+# Single PDF with vision analysis
+python create_flow_document.py --pdf "Files/report.pdf"
+
+# Without LLM (faster, no chart interpretations)
+python create_flow_document.py --no-llm
+
+# === Step-by-Step Processing ===
+
 # Full extraction with LLM and MongoDB
 python main_enhanced.py
 
@@ -358,9 +442,6 @@ python import_to_mongodb.py
 # Create consolidated documents (one per PDF)
 python create_consolidated_docs.py
 
-# Process single PDF
-python main_enhanced.py --pdf "Files/TR Complete March 2024.pdf"
-
 # Without LLM (faster)
 python main_enhanced.py --no-llm
 
@@ -369,9 +450,6 @@ python main_enhanced.py --no-db
 
 # Show database statistics
 python main_enhanced.py --stats
-
-# Quiet mode (minimal output)
-python main_enhanced.py --quiet
 ```
 
 ## Output Files
@@ -384,10 +462,13 @@ python main_enhanced.py --quiet
 | `*_charts_manifest.json` | Chart metadata for visualization |
 | `*_forecast_tables.json` | Structured forecast tables |
 | `*_consolidated.json` | Single document per PDF (in output/consolidated/) |
+| `*_flow.json` | Flow-based document with vision interpretations (in output/flow/) |
 
 ## Query Examples
 
 ```javascript
+// === Consolidated Documents ===
+
 // Get complete report by ID
 db.reports_consolidated.findOne({report_id: "tr_complete_march_2024"})
 
@@ -406,22 +487,63 @@ db.reports_consolidated.findOne(
 // Find reports by period
 db.reports_consolidated.find({report_period: "March 2024"})
 
-// Get statistics for all reports
-db.reports_consolidated.find({}, {report_id: 1, statistics: 1})
+// === Flow Documents (with Vision Analysis) ===
 
-// Find reports with specific series
-db.reports_consolidated.find({
-  "series_index.all_series_names": "US Industrial Production"
-})
+// Get flow document with chart interpretations
+db.ITRextract_Flow.findOne({report_id: "itr_trends_report_november_2025"})
+
+// Get all chart interpretations for a report
+db.ITRextract_Flow.aggregate([
+  {$match: {report_id: "itr_trends_report_november_2025"}},
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.block_type": "chart"}},
+  {$project: {
+    series: "$document_flow.series_name",
+    chart_type: "$document_flow.blocks.content.chart_type",
+    interpretation: "$document_flow.blocks.interpretation",
+    trend: "$document_flow.blocks.metadata.trend_direction"
+  }}
+])
+
+// Find charts showing declining trends
+db.ITRextract_Flow.aggregate([
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.interpretation.trend_direction": "falling"}},
+  {$project: {
+    report_id: 1,
+    series: "$document_flow.series_name",
+    implications: "$document_flow.blocks.interpretation.business_implications"
+  }}
+])
+
+// Get series in recession phase (D)
+db.ITRextract_Flow.aggregate([
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.interpretation.current_phase": "D"}},
+  {$project: {
+    report_id: 1,
+    series: "$document_flow.series_name",
+    description: "$document_flow.blocks.interpretation.description"
+  }}
+])
 ```
+
+## Completed Enhancements (v3.0.0)
+
+1. **Vision-Based Chart Analysis**: GPT-4 Vision interprets all 665 charts with trend analysis
+2. **Flow-Based Documents**: Preserve PDF reading order for downstream LLM consumption
+3. **Automated Workflow**: End-to-end processing with single command
+4. **File Watcher**: Automatic processing when new PDFs are uploaded
 
 ## Future Enhancements
 
-1. **Image Extraction**: Extract actual chart images for archival/display
-2. **Time Series Database**: Add InfluxDB or TimescaleDB for historical tracking
-3. **API Layer**: REST/GraphQL API for data access
-4. **Dashboard Integration**: Direct Tableau/PowerBI connectors
-5. **Automated Scheduling**: Cron-based processing of new reports
-6. **Comparison Reports**: Cross-period analysis and trend detection
-7. **Alert System**: Notifications for significant forecast changes
-8. **Vector Embeddings**: Semantic search across report content
+1. **Time Series Database**: Add InfluxDB or TimescaleDB for historical tracking
+2. **API Layer**: REST/GraphQL API for data access
+3. **Dashboard Integration**: Direct Tableau/PowerBI connectors
+4. **Comparison Reports**: Cross-period analysis and trend detection
+5. **Alert System**: Notifications for significant forecast changes
+6. **Vector Embeddings**: Semantic search across report content
+7. **Chart Image Storage**: Store extracted chart images in blob storage

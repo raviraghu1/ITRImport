@@ -1,8 +1,10 @@
 # ITRImport
 
-**ITR Economics Data Import & Analysis System**
+**ITR Economics Data Import & Analysis System** | v3.0.0
 
-Extract, analyze, and store economic data from ITR Economics Trends Report PDFs with AI-powered enhancement.
+Extract, analyze, and store economic data from ITR Economics Trends Report PDFs with AI-powered enhancement and GPT-4 Vision chart interpretation.
+
+> **665 charts analyzed** across 5 reports with full LLM vision interpretations
 
 ## Features
 
@@ -59,21 +61,86 @@ python create_consolidated_docs.py
 python create_flow_document.py
 ```
 
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ITRImport System                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐     ┌──────────────────────────────────────────────────┐  │
+│  │   PDF File  │────▶│              Processing Pipeline                  │  │
+│  │  (Upload)   │     │                                                   │  │
+│  └─────────────┘     │  ┌────────────┐   ┌────────────┐   ┌──────────┐  │  │
+│                      │  │  PyMuPDF   │──▶│    LLM     │──▶│  Vision  │  │  │
+│                      │  │ Extraction │   │Enhancement │   │ Analysis │  │  │
+│                      │  └────────────┘   └────────────┘   └──────────┘  │  │
+│                      └──────────────────────────┬───────────────────────┘  │
+│                                                 │                          │
+│                      ┌──────────────────────────┼──────────────────────┐   │
+│                      │                          ▼                      │   │
+│                      │              ┌───────────────────┐              │   │
+│                      │              │    MongoDB Atlas   │              │   │
+│                      │              └─────────┬─────────┘              │   │
+│                      │    ┌─────────────┬─────┴─────┬─────────────┐    │   │
+│                      │    ▼             ▼           ▼             ▼    │   │
+│                      │ ┌──────┐   ┌──────────┐  ┌──────┐   ┌────────┐ │   │
+│                      │ │ Flow │   │Consolidated│ │Sector│   │ Charts │ │   │
+│                      │ │ Docs │   │   Docs    │  │Series│   │Metadata│ │   │
+│                      │ └──────┘   └──────────┘  └──────┘   └────────┘ │   │
+│                      └────────────────────────────────────────────────┘   │
+│                                                 │                          │
+│                      ┌──────────────────────────┼──────────────────────┐   │
+│                      │            Output Files  ▼                      │   │
+│                      │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐ │   │
+│                      │  │ JSON │  │ CSV  │  │ TXT  │  │ Flow + Vision│ │   │
+│                      │  └──────┘  └──────┘  └──────┘  └──────────────┘ │   │
+│                      └────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Design
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| PDF Parser | PyMuPDF (fitz) | Extract text, images, and structure from PDFs |
+| LLM Extractor | Azure OpenAI GPT-4 | Intelligent content extraction and structuring |
+| Vision Analyzer | GPT-4 Vision | Interpret chart images with trend analysis |
+| Flow Extractor | Custom Python | Preserve PDF reading order and context |
+| Database | MongoDB Atlas | Store structured data with sector collections |
+| Analyzer | pandas | Generate reports and exports |
+
+### Data Flow
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
+│  PDF File   │────▶│ FlowExtractor│────▶│ LLMExtractor│────▶│ VisionAnalysis│
+└─────────────┘     └──────────────┘     └─────────────┘     └──────┬───────┘
+                                                                    │
+                    ┌───────────────────────────────────────────────┘
+                    ▼
+              ┌──────────────┐     ┌─────────────────┐     ┌────────────┐
+              │  MongoDB     │────▶│ ITRextract_Flow │────▶│ Downstream │
+              │  Storage     │     │   Collection    │     │    LLMs    │
+              └──────────────┘     └─────────────────┘     └────────────┘
+```
+
 ## Workflow Pipeline
 
 The `workflow.py` script provides automated end-to-end processing:
 
 ```
-PDF Upload → Extraction → LLM Enhancement → MongoDB Storage → Consolidation → Reports
+PDF Upload → Extraction → LLM Enhancement → Vision Analysis → MongoDB Storage → Reports
 ```
 
 ### Pipeline Steps
 
 1. **PDF Extraction** (PyMuPDF) - Extract text, charts, tables, and metadata
-2. **LLM Enhancement** (Azure OpenAI GPT-4) - Intelligent content extraction
-3. **Report Generation** - JSON, CSV, TXT outputs
-4. **MongoDB Storage** - Store in sector-specific collections
-5. **Consolidation** - Create single document per PDF for downstream use
+2. **Flow Preservation** - Maintain reading order for context
+3. **LLM Enhancement** (Azure OpenAI GPT-4) - Intelligent content extraction
+4. **Vision Analysis** (GPT-4 Vision) - Interpret chart images with trends
+5. **MongoDB Storage** - Store in sector-specific and flow collections
+6. **Report Generation** - JSON, CSV, TXT, and flow document outputs
 
 ### Watch Mode
 
@@ -104,6 +171,7 @@ When a new PDF is uploaded, the workflow automatically:
 | `*_charts_manifest.json` | Chart metadata for visualization |
 | `*_forecast_tables.json` | Structured forecast tables |
 | `*_consolidated.json` | Single document per PDF (in output/consolidated/) |
+| `*_flow.json` | Flow-based document with vision interpretations (in output/flow/) |
 
 ## MongoDB Collections
 
@@ -151,6 +219,56 @@ Each document in `reports_consolidated` contains all data from one PDF:
 }
 ```
 
+### Flow Document Structure
+
+Each document in `ITRextract_Flow` preserves the PDF reading order with vision analysis:
+
+```json
+{
+  "report_id": "itr_trends_report_november_2025",
+  "pdf_filename": "ITR Trends Report November 2025.pdf",
+  "report_period": "November 2025",
+  "metadata": {
+    "total_pages": 54,
+    "total_charts": 66,
+    "extraction_date": "2024-12-08T..."
+  },
+  "document_flow": [
+    {
+      "page_number": 1,
+      "series_name": "US Industrial Production",
+      "blocks": [
+        {
+          "block_type": "heading",
+          "content": "US Industrial Production",
+          "sequence_number": 1
+        },
+        {
+          "block_type": "text",
+          "content": "Overview text...",
+          "sequence_number": 2
+        },
+        {
+          "block_type": "chart",
+          "content": {"chart_type": "rate_of_change", "width": 400, "height": 300},
+          "interpretation": {
+            "description": "Chart shows 12/12 rate-of-change...",
+            "trend_direction": "rising",
+            "current_phase": "A",
+            "forecast_trend": "improving",
+            "key_patterns": ["Recovery from 2023 low", "Accelerating growth"],
+            "business_implications": "Consider inventory expansion...",
+            "confidence": "high"
+          },
+          "sequence_number": 3
+        }
+      ]
+    }
+  ],
+  "series_index": ["US Industrial Production", "US GDP", ...]
+}
+```
+
 ### Query Examples
 
 ```javascript
@@ -186,6 +304,30 @@ db.ITRextract_Flow.aggregate([
     chart_type: "$document_flow.blocks.content.chart_type",
     interpretation: "$document_flow.blocks.interpretation",
     trend: "$document_flow.blocks.metadata.trend_direction"
+  }}
+])
+
+// Find all series in recession phase (D)
+db.ITRextract_Flow.aggregate([
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.interpretation.current_phase": "D"}},
+  {$project: {
+    report_id: 1,
+    series: "$document_flow.series_name",
+    implications: "$document_flow.blocks.interpretation.business_implications"
+  }}
+])
+
+// Get business implications for declining trends
+db.ITRextract_Flow.aggregate([
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.interpretation.trend_direction": "falling"}},
+  {$project: {
+    series: "$document_flow.series_name",
+    description: "$document_flow.blocks.interpretation.description",
+    implications: "$document_flow.blocks.interpretation.business_implications"
   }}
 ])
 ```
@@ -241,22 +383,35 @@ Required environment variables:
 | Metric | Value |
 |--------|-------|
 | PDFs Processed | 5 |
-| Series Extracted | 118 |
-| Charts Captured | 289 |
-| Forecast Tables | 29 |
+| Total Pages | 246 |
+| Series Extracted | 117 |
+| Charts with Vision Analysis | 665 |
+| LLM Interpretations | 665 |
+| Flow Documents | 5 |
 | Consolidated Documents | 5 |
-| Total MongoDB Documents | 446 |
 | Sectors | Core, Financial, Construction, Manufacturing |
 
 ### Reports Processed
 
-| Report | Period | Series | Charts |
-|--------|--------|--------|--------|
-| DYMAX DEC 2021 ff.pdf | December 2021 | 10 | 39 |
-| TR Complete March 2024.pdf | March 2024 | 32 | 88 |
-| TR Complete July 2024.pdf | July 2024 | 36 | 102 |
-| ITR Webinar July 2021.pdf | - | 6 | 26 |
-| ITR Trends Report November 2025.pdf | November 2025 | 34 | 34 |
+| Report | Period | Pages | Series | Charts | LLM Interpretations |
+|--------|--------|-------|--------|--------|---------------------|
+| DYMAX DEC 2021 ff.pdf | December 2021 | 48 | 9 | 155 | 155 |
+| TR Complete March 2024.pdf | March 2024 | 58 | 31 | 158 | 158 |
+| TR Complete July 2024.pdf | July 2024 | 57 | 34 | 152 | 152 |
+| ITR Webinar July 2021.pdf | July 2021 | 29 | 6 | 134 | 134 |
+| ITR Trends Report November 2025.pdf | November 2025 | 54 | 37 | 66 | 66 |
+
+### Flow Document Features
+
+Each flow document in `ITRextract_Flow` contains:
+- **Document Flow**: Content blocks in reading order (text, charts, tables, headings)
+- **Vision Interpretations**: GPT-4 Vision analysis of each chart including:
+  - Trend direction (rising/falling/stabilizing)
+  - Business cycle phase (A/B/C/D)
+  - Key patterns identified
+  - Business implications
+- **Series Index**: Quick lookup of all economic series
+- **Metadata**: Page count, chart count, extraction timestamp
 
 ## License
 
