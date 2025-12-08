@@ -6,6 +6,8 @@ Extract, analyze, and store economic data from ITR Economics Trends Report PDFs 
 
 ## Features
 
+- **Automated Workflow**: End-to-end processing with a single command
+- **File Watcher**: Automatic processing when new PDFs are uploaded
 - **PDF Data Extraction**: Extract 30+ economic series from ITR Trends Reports
 - **Chart & Table Context**: Capture chart metadata and forecast tables
 - **LLM Enhancement**: Azure OpenAI GPT-4 for intelligent content extraction
@@ -23,27 +25,69 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your MongoDB and Azure OpenAI credentials
 
-# Process all PDFs in Files/
+# === RECOMMENDED: Use the Workflow (End-to-End Processing) ===
+
+# Process a single PDF through complete workflow
+python workflow.py --pdf "Files/TR Complete March 2024.pdf"
+
+# Process all PDFs in a directory
+python workflow.py --dir Files/
+
+# Watch directory for new PDFs (continuous monitoring)
+python workflow.py --watch Files/
+
+# Process without LLM (faster)
+python workflow.py --pdf "Files/report.pdf" --no-llm
+
+# Check workflow status
+python workflow.py --status
+
+# === Alternative: Step-by-Step Processing ===
+
+# Step 1: Extract from PDFs
 python main_enhanced.py
 
-# Import to MongoDB
+# Step 2: Import to MongoDB
 python import_to_mongodb.py
 
-# Create consolidated documents (one per PDF)
+# Step 3: Create consolidated documents
 python create_consolidated_docs.py
-
-# Process single PDF
-python main_enhanced.py --pdf "Files/TR Complete March 2024.pdf"
-
-# Without LLM (faster)
-python main_enhanced.py --no-llm
-
-# Without database
-python main_enhanced.py --no-db
-
-# Show database stats
-python main_enhanced.py --stats
 ```
+
+## Workflow Pipeline
+
+The `workflow.py` script provides automated end-to-end processing:
+
+```
+PDF Upload → Extraction → LLM Enhancement → MongoDB Storage → Consolidation → Reports
+```
+
+### Pipeline Steps
+
+1. **PDF Extraction** (PyMuPDF) - Extract text, charts, tables, and metadata
+2. **LLM Enhancement** (Azure OpenAI GPT-4) - Intelligent content extraction
+3. **Report Generation** - JSON, CSV, TXT outputs
+4. **MongoDB Storage** - Store in sector-specific collections
+5. **Consolidation** - Create single document per PDF for downstream use
+
+### Watch Mode
+
+For continuous processing of uploaded files:
+
+```bash
+# Watch the Files/ directory for new PDFs
+python workflow.py --watch Files/
+
+# With custom poll interval (default: 10 seconds)
+python workflow.py --watch Files/ --poll-interval 30
+```
+
+When a new PDF is uploaded, the workflow automatically:
+- Detects the new file
+- Processes through complete pipeline
+- Stores results in MongoDB
+- Creates consolidated document
+- Generates all output reports
 
 ## Output Files
 
@@ -127,6 +171,7 @@ db.reports_consolidated.find({report_period: "March 2024"})
 
 ```
 ITRImport/
+├── workflow.py                # Automated end-to-end workflow (RECOMMENDED)
 ├── main_enhanced.py           # Main extraction entry point
 ├── import_to_mongodb.py       # Import data to MongoDB
 ├── create_consolidated_docs.py # Create single doc per PDF
@@ -138,7 +183,7 @@ ITRImport/
 │   └── enhanced_analyzer.py   # Reports and exports
 ├── output/                    # Generated files
 │   └── consolidated/          # Consolidated JSON files
-├── Files/                     # Source PDFs
+├── Files/                     # Source PDFs (upload here)
 └── specs/                     # Documentation
 ```
 
