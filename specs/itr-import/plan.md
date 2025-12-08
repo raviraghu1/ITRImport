@@ -1,11 +1,11 @@
 # Implementation Plan: ITR Economics Data Import & Analysis System
 
 **Branch**: `main` | **Date**: 2025-12-08 | **Spec**: [spec.md](./spec.md)
-**Status**: Implemented (v2.0.0)
+**Status**: Implemented (v2.1.0)
 
 ## Summary
 
-Comprehensive data extraction system for ITR Economics Trends Report PDFs, featuring PyMuPDF-based parsing, Azure OpenAI GPT-4 enhancement, MongoDB storage, and multi-format reporting.
+Comprehensive data extraction system for ITR Economics Trends Report PDFs, featuring PyMuPDF-based parsing, Azure OpenAI GPT-4 enhancement, MongoDB storage with consolidated documents, and multi-format reporting.
 
 ## Technical Context
 
@@ -50,6 +50,8 @@ specs/itr-import/
 ITRImport/
 ├── main.py                    # Basic extraction entry point
 ├── main_enhanced.py           # Enhanced extraction with LLM
+├── import_to_mongodb.py       # MongoDB import utility
+├── create_consolidated_docs.py # Consolidated document generator
 ├── extract_pdf.py             # Simple PDF text extraction utility
 ├── src/
 │   ├── __init__.py
@@ -61,6 +63,7 @@ ITRImport/
 │   ├── enhanced_analyzer.py   # Enhanced analysis with detailed reports
 │   └── llm_extractor.py       # Azure OpenAI GPT-4 integration
 ├── output/                    # Generated reports and exports
+│   └── consolidated/          # Consolidated JSON files (one per PDF)
 ├── Files/                     # Source PDF files
 └── .specify/
     └── memory/
@@ -125,7 +128,14 @@ class BusinessPhase(Enum):
 - Composite key indexes for idempotency
 - Upsert operations for data updates
 
-### 5. Enhanced Analyzer (`src/enhanced_analyzer.py`)
+### 5. Consolidated Document Generator (`create_consolidated_docs.py`)
+
+- Creates single document per PDF for downstream use
+- Aggregates all series, charts, and forecast tables
+- Builds series index for quick lookups
+- Exports both to MongoDB and JSON files
+
+### 6. Enhanced Analyzer (`src/enhanced_analyzer.py`)
 
 - Multi-format report generation (TXT, JSON, CSV)
 - Forecast summary aggregation
@@ -145,8 +155,17 @@ api_version = "2025-01-01-preview"
 
 ```python
 uri = "mongodb+srv://licensing:***@analytics.meugir.mongodb.net/"
-database = "itr_economics"
-collections = ["core_series", "financial_series", "construction_series", "manufacturing_series", "report_metadata"]
+database = "ITRReports"
+collections = [
+    "reports",              # Report metadata
+    "core_series",          # Core economic indicators
+    "financial_series",     # Financial market indicators
+    "construction_series",  # Construction sector indicators
+    "manufacturing_series", # Manufacturing sector indicators
+    "charts",               # Chart metadata
+    "forecast_tables",      # Forecast tables
+    "reports_consolidated"  # Single document per PDF (downstream use)
+]
 ```
 
 ## Data Flow
@@ -206,6 +225,14 @@ collections = ["core_series", "financial_series", "construction_series", "manufa
 5. Export CSV summary
 6. Generate charts manifest
 
+### Phase 5: Consolidation (Optional)
+1. Query all sector collections for report
+2. Aggregate series, charts, and forecast tables
+3. Build series index for quick lookups
+4. Create single consolidated document
+5. Upsert to `reports_consolidated` collection
+6. Export consolidated JSON file
+
 ## Error Handling
 
 | Error Type | Handling |
@@ -263,11 +290,17 @@ python main_enhanced.py --pdf "Files/report.pdf"
 
 # Without external services
 python main_enhanced.py --no-db --no-llm
+
+# Import to MongoDB
+python import_to_mongodb.py
+
+# Create consolidated documents
+python create_consolidated_docs.py
 ```
 
 ## Metrics & Monitoring
 
-### Current Results (v2.0.0)
+### Current Results (v2.1.0)
 
 | Metric | Value |
 |--------|-------|
@@ -276,7 +309,8 @@ python main_enhanced.py --no-db --no-llm
 | Charts Captured | 289 |
 | Forecast Tables | 29 |
 | LLM Enhanced | 118 |
-| MongoDB Documents | 123 |
+| Consolidated Documents | 5 |
+| Total MongoDB Documents | 446 |
 | Processing Time | ~2 min/PDF with LLM |
 
 ### Recommended Monitoring

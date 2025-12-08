@@ -3,7 +3,7 @@
 **Feature Branch**: `main`
 **Created**: 2025-12-08
 **Status**: Implemented
-**Version**: 2.0.0
+**Version**: 2.1.0
 
 ## Overview
 
@@ -107,6 +107,23 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 
 ---
 
+### User Story 7 - Consolidated Documents for Downstream Use (Priority: P1)
+
+As a downstream system developer, I want a single consolidated document per PDF file so that I can easily consume complete report data without joining multiple collections.
+
+**Why this priority**: Critical for downstream integration - enables simple queries and data pipelines.
+
+**Independent Test**: Run `python create_consolidated_docs.py` and verify `reports_consolidated` collection contains one document per PDF with all data.
+
+**Acceptance Scenarios**:
+
+1. **Given** extracted data from a PDF, **When** consolidated, **Then** a single document contains all series, charts, forecasts, and metadata.
+2. **Given** a consolidated document, **When** queried, **Then** I can access series by sector, get all chart metadata, and retrieve the executive summary in one query.
+3. **Given** 5 processed PDFs, **When** consolidation runs, **Then** 5 documents exist in `reports_consolidated` collection.
+4. **Given** a consolidated document, **When** I need series names, **Then** `series_index.all_series_names` provides a quick lookup list.
+
+---
+
 ### Edge Cases
 
 - **Corrupted PDF**: System should fail gracefully with clear error message, not crash.
@@ -145,6 +162,8 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 - **FR-015**: System MUST implement idempotent upsert operations using composite keys (series_id + report_period).
 - **FR-016**: System MUST create indexes on date fields and series identifiers for query performance.
 - **FR-017**: System MUST store report-level metadata including executive summary and page counts.
+- **FR-028**: System MUST create consolidated documents with all data from each PDF in a single document.
+- **FR-029**: System MUST include series index for quick lookup in consolidated documents.
 
 #### Output Generation
 - **FR-018**: System MUST generate detailed text reports with executive summary, sector breakdown, and forecasts.
@@ -152,6 +171,7 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 - **FR-020**: System MUST export CSV summaries suitable for spreadsheet analysis.
 - **FR-021**: System MUST generate charts manifest JSON for visualization integration.
 - **FR-022**: System MUST generate forecast tables JSON for downstream processing.
+- **FR-030**: System MUST export consolidated JSON files for each PDF.
 
 #### CLI Interface
 - **FR-023**: System MUST support processing single PDF via `--pdf` argument.
@@ -169,6 +189,7 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 - **SourceMetadata**: Traceability information linking data to source PDF, page, and extraction time.
 - **Sector**: Classification enum (Core, Financial, Construction, Manufacturing).
 - **BusinessPhase**: ITR business cycle phase (A=Recovery, B=Accelerating, C=Slowing, D=Recession).
+- **ConsolidatedReport**: Single document containing all extracted data from one PDF file.
 
 ## Technical Architecture
 
@@ -188,14 +209,20 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 └───────────────┘ └───────────┘ └───────────┘ └─────────────────┘
         │                              │
         ▼                              ▼
-┌───────────────┐              ┌─────────────────┐
-│    Models     │              │   Collections   │
-│ (Dataclasses) │              │ core_series     │
-└───────────────┘              │ financial_series│
-                               │ construction_*  │
-                               │ manufacturing_* │
-                               │ report_metadata │
-                               └─────────────────┘
+┌───────────────┐              ┌─────────────────────────┐
+│    Models     │              │      Collections        │
+│ (Dataclasses) │              │ ┌─────────────────────┐ │
+└───────────────┘              │ │reports_consolidated │ │
+                               │ │  (1 doc per PDF)    │ │
+                               │ └─────────────────────┘ │
+                               │ core_series             │
+                               │ financial_series        │
+                               │ construction_series     │
+                               │ manufacturing_series    │
+                               │ charts                  │
+                               │ forecast_tables         │
+                               │ reports                 │
+                               └─────────────────────────┘
 ```
 
 ### Data Flow
@@ -204,7 +231,8 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 2. **Extraction**: PyMuPDF extracts text, images, and structure
 3. **Enhancement**: Azure OpenAI GPT-4 enriches extracted content
 4. **Storage**: MongoDB stores structured data with indexes
-5. **Output**: JSON, CSV, TXT reports for analysis and integration
+5. **Consolidation**: Create single document per PDF for downstream use
+6. **Output**: JSON, CSV, TXT reports for analysis and integration
 
 ### Technology Stack
 
@@ -216,6 +244,7 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 | Language | Python 3.11+ |
 | HTTP Client | httpx |
 | Data Analysis | pandas |
+| Environment | python-dotenv |
 
 ## Success Criteria
 
@@ -229,8 +258,10 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 - **SC-006**: Generated reports include executive summary, all sectors, and forecast tables.
 - **SC-007**: System handles 5+ PDFs in batch mode without memory issues or crashes.
 - **SC-008**: LLM enhancement improves highlight extraction quality (measured by completeness of bullet points).
+- **SC-009**: Consolidated documents contain 100% of extracted data from source PDF.
+- **SC-010**: Downstream systems can query complete report data with single document fetch.
 
-### Current Performance (v2.0.0)
+### Current Performance (v2.1.0)
 
 | Metric | Result |
 |--------|--------|
@@ -239,8 +270,19 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 | Total Charts Captured | 289 |
 | Forecast Tables Extracted | 29 |
 | LLM Enhanced Series | 118 (100%) |
-| MongoDB Documents | 123 |
+| Consolidated Documents | 5 |
+| Total MongoDB Documents | 446 |
 | Sectors Covered | 4/4 (Core, Financial, Construction, Manufacturing) |
+
+### Reports Processed
+
+| Report | Period | Series | Charts | Forecast Tables |
+|--------|--------|--------|--------|-----------------|
+| DYMAX DEC 2021 ff.pdf | December 2021 | 10 | 39 | 0 |
+| TR Complete March 2024.pdf | March 2024 | 32 | 88 | 0 |
+| TR Complete July 2024.pdf | July 2024 | 36 | 102 | 0 |
+| ITR Webinar July 2021.pdf | - | 6 | 26 | 0 |
+| ITR Trends Report November 2025.pdf | November 2025 | 34 | 34 | 29 |
 
 ## Configuration
 
@@ -249,23 +291,72 @@ As a dashboard developer, I want chart metadata and data exported so that I can 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `ITR_MONGODB_URI` | MongoDB connection string | localhost |
-| `AZURE_OPENAI_KEY` | Azure OpenAI API key | (configured) |
+| `ITR_DATABASE_NAME` | Database name | ITRReports |
+| `AZURE_OPENAI_KEY` | Azure OpenAI API key | (required) |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | (configured) |
+| `AZURE_OPENAI_API_VERSION` | API version | 2025-01-01-preview |
 
 ### MongoDB Collections
 
-| Collection | Description |
-|------------|-------------|
-| `core_series` | Core economic indicators |
-| `financial_series` | Financial market indicators |
-| `construction_series` | Construction sector indicators |
-| `manufacturing_series` | Manufacturing sector indicators |
-| `report_metadata` | Report-level metadata and summaries |
+| Collection | Description | Documents |
+|------------|-------------|-----------|
+| `reports_consolidated` | **Single document per PDF for downstream use** | 5 |
+| `reports` | Report metadata and executive summaries | 5 |
+| `core_series` | Core economic indicators | 33 |
+| `financial_series` | Financial market indicators | 26 |
+| `construction_series` | Construction sector indicators | 23 |
+| `manufacturing_series` | Manufacturing sector indicators | 36 |
+| `charts` | Chart metadata (type, dimensions, page) | 289 |
+| `forecast_tables` | Structured forecast tables | 29 |
+
+### Consolidated Document Structure
+
+```json
+{
+  "report_id": "tr_complete_march_2024",
+  "pdf_filename": "TR Complete March 2024.pdf",
+  "report_period": "March 2024",
+  "metadata": {
+    "page_count": 58,
+    "extraction_timestamp": "...",
+    "consolidated_timestamp": "..."
+  },
+  "executive_summary": {
+    "author": "BRIAN BEAULIEU",
+    "content": "..."
+  },
+  "statistics": {
+    "total_series": 32,
+    "series_by_sector": {"core": 9, "financial": 5, "construction": 7, "manufacturing": 11},
+    "total_charts": 88,
+    "total_forecast_tables": 0
+  },
+  "sectors": {
+    "core": {"series_count": 9, "series": [...]},
+    "financial": {"series_count": 5, "series": [...]},
+    "construction": {"series_count": 7, "series": [...]},
+    "manufacturing": {"series_count": 11, "series": [...]}
+  },
+  "charts": [...],
+  "forecast_tables": [...],
+  "series_index": {
+    "all_series_names": ["ITR Leading Indicator", "US Industrial Production", ...],
+    "by_sector": {"core": [...], "financial": [...], ...}
+  }
+}
+```
 
 ## Usage
 
 ```bash
 # Full extraction with LLM and MongoDB
 python main_enhanced.py
+
+# Import to MongoDB
+python import_to_mongodb.py
+
+# Create consolidated documents (one per PDF)
+python create_consolidated_docs.py
 
 # Process single PDF
 python main_enhanced.py --pdf "Files/TR Complete March 2024.pdf"
@@ -292,6 +383,37 @@ python main_enhanced.py --quiet
 | `*_enhanced_summary.csv` | Tabular summary for spreadsheets |
 | `*_charts_manifest.json` | Chart metadata for visualization |
 | `*_forecast_tables.json` | Structured forecast tables |
+| `*_consolidated.json` | Single document per PDF (in output/consolidated/) |
+
+## Query Examples
+
+```javascript
+// Get complete report by ID
+db.reports_consolidated.findOne({report_id: "tr_complete_march_2024"})
+
+// Get all series names from a report
+db.reports_consolidated.findOne(
+  {report_id: "tr_complete_march_2024"},
+  {"series_index.all_series_names": 1}
+)
+
+// Get core sector data only
+db.reports_consolidated.findOne(
+  {report_id: "tr_complete_march_2024"},
+  {"sectors.core": 1}
+)
+
+// Find reports by period
+db.reports_consolidated.find({report_period: "March 2024"})
+
+// Get statistics for all reports
+db.reports_consolidated.find({}, {report_id: 1, statistics: 1})
+
+// Find reports with specific series
+db.reports_consolidated.find({
+  "series_index.all_series_names": "US Industrial Production"
+})
+```
 
 ## Future Enhancements
 
@@ -302,3 +424,4 @@ python main_enhanced.py --quiet
 5. **Automated Scheduling**: Cron-based processing of new reports
 6. **Comparison Reports**: Cross-period analysis and trend detection
 7. **Alert System**: Notifications for significant forecast changes
+8. **Vector Embeddings**: Semantic search across report content
