@@ -258,6 +258,176 @@ What does this chart show and what are the key takeaways?"""
 
         return self._call_llm(system_prompt, user_prompt)
 
+    def interpret_chart_with_vision(self, image_base64: str, series_name: str,
+                                    chart_type: str, context: str = "") -> dict:
+        """Use GPT-4 Vision to interpret a chart image.
+
+        Args:
+            image_base64: Base64-encoded image data
+            series_name: Name of the economic series
+            chart_type: Type of chart (rate_of_change, data_trend, etc.)
+            context: Optional surrounding text context
+
+        Returns:
+            Dictionary with interpretation, trends, and insights
+        """
+        url = f"{self.config.endpoint}?api-version={self.config.api_version}"
+
+        system_prompt = """You are an expert economic analyst interpreting charts from ITR Economics Trends Reports.
+
+Analyze the chart image and provide:
+1. A detailed description of what the chart shows
+2. The current trend direction (rising, falling, stabilizing)
+3. Key inflection points or pattern changes
+4. Business cycle phase indication (A=Recovery, B=Accelerating Growth, C=Slowing Growth, D=Recession)
+5. Forecast direction if visible
+6. Key insights for business planning
+
+Return JSON:
+{
+    "description": "Detailed description of the chart",
+    "trend_direction": "rising/falling/stabilizing/mixed",
+    "current_phase": "A/B/C/D or null if unclear",
+    "forecast_trend": "improving/declining/stable or null",
+    "key_patterns": ["pattern 1", "pattern 2"],
+    "business_implications": "What this means for business decisions",
+    "confidence": "high/medium/low"
+}"""
+
+        user_content = [
+            {
+                "type": "text",
+                "text": f"""Analyze this {chart_type} chart for "{series_name}" from an ITR Economics Trends Report.
+
+{f"Context: {context[:1000]}" if context else ""}
+
+Provide a detailed interpretation of this economic chart."""
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{image_base64}",
+                    "detail": "high"
+                }
+            }
+        ]
+
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": self.config.api_key
+        }
+
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.1
+        }
+
+        try:
+            response = self.client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+
+            # Parse JSON response
+            content = content.strip()
+            if content.startswith("```"):
+                content = re.sub(r'^```(?:json)?\n?', '', content)
+                content = re.sub(r'\n?```$', '', content)
+
+            return json.loads(content)
+
+        except json.JSONDecodeError:
+            # Return as text interpretation if JSON parsing fails
+            return {
+                "description": content if 'content' in dir() else "Unable to interpret chart",
+                "trend_direction": None,
+                "current_phase": None,
+                "confidence": "low"
+            }
+        except Exception as e:
+            print(f"Vision interpretation error: {e}")
+            return {
+                "description": f"Error interpreting chart: {str(e)}",
+                "trend_direction": None,
+                "current_phase": None,
+                "confidence": "low"
+            }
+
+    def interpret_image(self, image_base64: str, context: str = "") -> dict:
+        """Use GPT-4 Vision to interpret any image from the PDF.
+
+        Args:
+            image_base64: Base64-encoded image data
+            context: Optional surrounding text context
+
+        Returns:
+            Dictionary with interpretation
+        """
+        url = f"{self.config.endpoint}?api-version={self.config.api_version}"
+
+        system_prompt = """You are analyzing images from ITR Economics Trends Reports.
+Describe what you see in the image and explain its relevance to economic analysis.
+
+Return JSON:
+{
+    "description": "What the image shows",
+    "type": "chart/diagram/logo/decorative/infographic",
+    "relevance": "How it relates to economic analysis",
+    "key_information": ["info 1", "info 2"]
+}"""
+
+        user_content = [
+            {
+                "type": "text",
+                "text": f"Describe this image from an ITR Economics report.{f' Context: {context[:500]}' if context else ''}"
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{image_base64}",
+                    "detail": "auto"
+                }
+            }
+        ]
+
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": self.config.api_key
+        }
+
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.1
+        }
+
+        try:
+            response = self.client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+
+            content = content.strip()
+            if content.startswith("```"):
+                content = re.sub(r'^```(?:json)?\n?', '', content)
+                content = re.sub(r'\n?```$', '', content)
+
+            return json.loads(content)
+
+        except Exception as e:
+            return {
+                "description": f"Unable to interpret image: {str(e)}",
+                "type": "unknown",
+                "relevance": "unknown"
+            }
+
     def analyze_trends(self, series_data: list[dict]) -> dict:
         """Analyze trends across multiple series."""
 

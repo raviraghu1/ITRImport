@@ -11,6 +11,8 @@ Extract, analyze, and store economic data from ITR Economics Trends Report PDFs 
 - **PDF Data Extraction**: Extract 30+ economic series from ITR Trends Reports
 - **Chart & Table Context**: Capture chart metadata and forecast tables
 - **LLM Enhancement**: Azure OpenAI GPT-4 for intelligent content extraction
+- **Vision-Based Chart Analysis**: GPT-4 Vision interprets charts with trend analysis
+- **Flow-Based Documents**: Preserve PDF context flow for better LLM understanding
 - **MongoDB Storage**: Organized by sector with idempotent upserts
 - **Consolidated Documents**: Single document per PDF for downstream use
 - **Multi-Format Export**: JSON, CSV, and detailed text reports
@@ -52,6 +54,9 @@ python import_to_mongodb.py
 
 # Step 3: Create consolidated documents
 python create_consolidated_docs.py
+
+# Create flow-based documents with vision analysis
+python create_flow_document.py
 ```
 
 ## Workflow Pipeline
@@ -106,7 +111,8 @@ When a new PDF is uploaded, the workflow automatically:
 
 | Collection | Description |
 |------------|-------------|
-| `reports_consolidated` | **Single document per PDF for downstream use** |
+| `ITRextract_Flow` | **Flow-based document with vision interpretations** |
+| `reports_consolidated` | Single document per PDF for downstream use |
 | `reports` | Report metadata and executive summaries |
 | `core_series` | Core economic indicators |
 | `financial_series` | Financial market indicators |
@@ -165,6 +171,23 @@ db.reports_consolidated.findOne(
 
 // Find reports by period
 db.reports_consolidated.find({report_period: "March 2024"})
+
+// Get flow document with chart interpretations
+db.ITRextract_Flow.findOne({report_id: "itr_trends_report_november_2025"})
+
+// Get all chart interpretations for a series
+db.ITRextract_Flow.aggregate([
+  {$match: {report_id: "itr_trends_report_november_2025"}},
+  {$unwind: "$document_flow"},
+  {$unwind: "$document_flow.blocks"},
+  {$match: {"document_flow.blocks.block_type": "chart"}},
+  {$project: {
+    series: "$document_flow.series_name",
+    chart_type: "$document_flow.blocks.content.chart_type",
+    interpretation: "$document_flow.blocks.interpretation",
+    trend: "$document_flow.blocks.metadata.trend_direction"
+  }}
+])
 ```
 
 ## Project Structure
@@ -172,17 +195,20 @@ db.reports_consolidated.find({report_period: "March 2024"})
 ```
 ITRImport/
 ├── workflow.py                # Automated end-to-end workflow (RECOMMENDED)
+├── create_flow_document.py    # Flow-based extraction with vision
 ├── main_enhanced.py           # Main extraction entry point
 ├── import_to_mongodb.py       # Import data to MongoDB
 ├── create_consolidated_docs.py # Create single doc per PDF
 ├── src/
 │   ├── models.py              # Data models
 │   ├── enhanced_parser.py     # PDF parsing with context
-│   ├── llm_extractor.py       # Azure OpenAI integration
+│   ├── flow_extractor.py      # Flow-based extraction with context
+│   ├── llm_extractor.py       # Azure OpenAI integration (+ Vision)
 │   ├── database.py            # MongoDB operations
 │   └── enhanced_analyzer.py   # Reports and exports
 ├── output/                    # Generated files
-│   └── consolidated/          # Consolidated JSON files
+│   ├── consolidated/          # Consolidated JSON files
+│   └── flow/                  # Flow-based JSON files
 ├── Files/                     # Source PDFs (upload here)
 └── specs/                     # Documentation
 ```
