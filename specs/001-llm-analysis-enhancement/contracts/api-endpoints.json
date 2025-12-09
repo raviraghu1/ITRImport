@@ -1,0 +1,178 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itrimport.local/schemas/api-endpoints.json",
+  "title": "Analysis API Endpoints",
+  "description": "API contracts for analysis endpoints",
+  "endpoints": {
+    "/api/reports/{report_id}/analysis": {
+      "GET": {
+        "summary": "Get complete analysis for a report",
+        "parameters": {
+          "report_id": {
+            "type": "string",
+            "required": true,
+            "description": "Report identifier"
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete analysis data",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "report_id": { "type": "string" },
+                "overall_analysis": { "$ref": "overall-analysis.json" },
+                "sector_analyses": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "sector-analysis.json" }
+                },
+                "analysis_metadata": { "$ref": "analysis-export.json#/definitions/AnalysisMetadata" }
+              }
+            }
+          },
+          "404": {
+            "description": "Report not found"
+          },
+          "503": {
+            "description": "Database not available"
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/overall": {
+      "GET": {
+        "summary": "Get only overall analysis",
+        "parameters": {
+          "report_id": {
+            "type": "string",
+            "required": true
+          }
+        },
+        "responses": {
+          "200": {
+            "schema": { "$ref": "overall-analysis.json" }
+          },
+          "404": { "description": "Report not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/sectors": {
+      "GET": {
+        "summary": "Get all sector analyses",
+        "parameters": {
+          "report_id": { "type": "string", "required": true }
+        },
+        "responses": {
+          "200": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": { "$ref": "sector-analysis.json" }
+            }
+          },
+          "404": { "description": "Report not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/sectors/{sector}": {
+      "GET": {
+        "summary": "Get analysis for a specific sector",
+        "parameters": {
+          "report_id": { "type": "string", "required": true },
+          "sector": {
+            "type": "string",
+            "required": true,
+            "enum": ["core", "financial", "construction", "manufacturing"]
+          }
+        },
+        "responses": {
+          "200": {
+            "schema": { "$ref": "sector-analysis.json" }
+          },
+          "404": { "description": "Report or sector not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/sentiment": {
+      "GET": {
+        "summary": "Get sentiment score only",
+        "parameters": {
+          "report_id": { "type": "string", "required": true }
+        },
+        "responses": {
+          "200": {
+            "schema": { "$ref": "overall-analysis.json#/definitions/SentimentScore" }
+          },
+          "404": { "description": "Report not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/themes": {
+      "GET": {
+        "summary": "Get key themes only",
+        "parameters": {
+          "report_id": { "type": "string", "required": true }
+        },
+        "responses": {
+          "200": {
+            "schema": {
+              "type": "array",
+              "items": { "$ref": "overall-analysis.json#/definitions/Theme" }
+            }
+          },
+          "404": { "description": "Report not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/analysis/export": {
+      "GET": {
+        "summary": "Export complete analysis in structured format",
+        "parameters": {
+          "report_id": { "type": "string", "required": true },
+          "format": {
+            "type": "string",
+            "enum": ["json"],
+            "default": "json",
+            "description": "Export format"
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis export file",
+            "schema": { "$ref": "analysis-export.json" },
+            "headers": {
+              "Content-Disposition": {
+                "type": "string",
+                "example": "attachment; filename=analysis_report_id.json"
+              }
+            }
+          },
+          "404": { "description": "Report not found" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/regenerate-analysis": {
+      "POST": {
+        "summary": "Regenerate analysis without reprocessing PDF",
+        "description": "Uses existing extracted data to regenerate analysis with current LLM",
+        "parameters": {
+          "report_id": { "type": "string", "required": true }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis regenerated successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "message": { "type": "string" },
+                "analysis_metadata": { "$ref": "analysis-export.json#/definitions/AnalysisMetadata" }
+              }
+            }
+          },
+          "404": { "description": "Report not found" },
+          "500": { "description": "Regeneration failed" }
+        }
+      }
+    }
+  }
+}

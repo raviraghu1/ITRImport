@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ITR Report Viewer - AI-Powered Economic Analysis</title>
-    <link rel="stylesheet" href="/static/css/styles.css?v=4">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -94,6 +94,9 @@
                     <button class="data-tab active" data-tab="pagedata" onclick="switchTab('pagedata')">
                         <i class="fas fa-sync-alt"></i> Page Data
                     </button>
+                    <button class="data-tab" data-tab="analysis" onclick="switchTab('analysis')">
+                        <i class="fas fa-brain"></i> Analysis
+                    </button>
                     <button class="data-tab" data-tab="overview" onclick="switchTab('overview')">
                         <i class="fas fa-th-large"></i> Overview
                     </button>
@@ -120,6 +123,31 @@
                     <div id="page-data-content">
                         <div class="loading">
                             <p>Select a report to view page data</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Tab (NEW) -->
+                <div class="tab-content" id="tab-analysis">
+                    <div class="analysis-header">
+                        <div class="analysis-actions">
+                            <button class="btn btn-primary" id="generate-all-header-btn" onclick="generateAllSummaries()">
+                                <i class="fas fa-magic"></i> Generate All Summaries
+                            </button>
+                            <button class="btn btn-secondary" onclick="generateOverallSummary(true)">
+                                <i class="fas fa-brain"></i> Generate Overall
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportAnalysis()">
+                                <i class="fas fa-file-pdf"></i> Export PDF
+                            </button>
+                            <button class="btn btn-secondary" onclick="regenerateAnalysis()">
+                                <i class="fas fa-redo"></i> Regenerate
+                            </button>
+                        </div>
+                    </div>
+                    <div id="analysis-content">
+                        <div class="loading">
+                            <p>Select a report to view analysis</p>
                         </div>
                     </div>
                 </div>
@@ -270,6 +298,237 @@ Select a report to view raw JSON data
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=6"></script>
+    <!-- AI Analysis Modal -->
+    <div id="ai-analysis-modal" class="ai-analysis-modal" onclick="closeAIAnalysisModal(event)">
+        <div class="ai-analysis-modal-content" onclick="event.stopPropagation()">
+            <div class="ai-analysis-modal-header">
+                <h3>
+                    <i class="fas fa-brain"></i>
+                    Analyze Pages with AI
+                </h3>
+                <button class="document-modal-close" onclick="closeAIAnalysisModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ai-analysis-modal-body">
+                <!-- Page Selection -->
+                <div class="ai-analysis-section">
+                    <h4><i class="fas fa-file-alt"></i> Select Pages to Analyze</h4>
+                    <div class="page-selection-controls">
+                        <button class="btn btn-sm btn-secondary" onclick="selectCurrentPage()">Current Page</button>
+                        <button class="btn btn-sm btn-secondary" onclick="selectAllPages()">All Pages</button>
+                        <button class="btn btn-sm btn-secondary" onclick="selectPageRange()">Range...</button>
+                        <button class="btn btn-sm btn-secondary" onclick="clearPageSelection()">Clear</button>
+                    </div>
+                    <div class="selected-pages-display" id="selected-pages-display">
+                        <span class="placeholder">No pages selected</span>
+                    </div>
+                    <div class="page-grid" id="page-grid">
+                        <!-- Page checkboxes will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Analysis Type -->
+                <div class="ai-analysis-section">
+                    <h4><i class="fas fa-cog"></i> Analysis Type</h4>
+                    <div class="analysis-type-options">
+                        <label class="analysis-type-option">
+                            <input type="radio" name="analysis-type" value="general" checked>
+                            <span class="option-content">
+                                <i class="fas fa-search"></i>
+                                <strong>General Analysis</strong>
+                                <small>Comprehensive overview with key trends and insights</small>
+                            </span>
+                        </label>
+                        <label class="analysis-type-option">
+                            <input type="radio" name="analysis-type" value="comparison">
+                            <span class="option-content">
+                                <i class="fas fa-balance-scale"></i>
+                                <strong>Comparison</strong>
+                                <small>Compare and contrast different series and indicators</small>
+                            </span>
+                        </label>
+                        <label class="analysis-type-option">
+                            <input type="radio" name="analysis-type" value="forecast">
+                            <span class="option-content">
+                                <i class="fas fa-chart-line"></i>
+                                <strong>Forecast Analysis</strong>
+                                <small>Outlook and trajectory predictions</small>
+                            </span>
+                        </label>
+                        <label class="analysis-type-option">
+                            <input type="radio" name="analysis-type" value="risks">
+                            <span class="option-content">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Risk Analysis</strong>
+                                <small>Identify potential risks and warning signs</small>
+                            </span>
+                        </label>
+                        <label class="analysis-type-option">
+                            <input type="radio" name="analysis-type" value="opportunities">
+                            <span class="option-content">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Opportunities</strong>
+                                <small>Identify positive indicators and opportunities</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Analyst Context -->
+                <div class="ai-analysis-section">
+                    <h4><i class="fas fa-comment-dots"></i> Additional Context (Optional)</h4>
+                    <p class="section-hint">Add any specific questions, focus areas, or context for the AI analysis</p>
+                    <textarea
+                        id="analyst-context"
+                        class="analyst-context-input"
+                        placeholder="Example: Focus on construction sector implications for Q1 2026 planning. We're particularly interested in housing starts correlation with our materials demand..."
+                        rows="4"
+                    ></textarea>
+                </div>
+
+                <!-- Analysis Results (shown after analysis) -->
+                <div class="ai-analysis-section ai-analysis-results" id="ai-analysis-results" style="display: none;">
+                    <h4><i class="fas fa-file-alt"></i> Analysis Results</h4>
+                    <div class="analysis-results-content" id="analysis-results-content">
+                        <!-- Results will be populated here -->
+                    </div>
+                    <div class="analysis-results-actions">
+                        <button class="btn btn-secondary" onclick="copyAnalysisResults()">
+                            <i class="fas fa-copy"></i> Copy to Clipboard
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportAnalysisResults()">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <button class="btn btn-primary" onclick="saveAnalysisToPage()">
+                            <i class="fas fa-save"></i> Save to Page
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="ai-analysis-modal-footer">
+                <div class="analysis-status" id="analysis-status">
+                    <span id="pages-selected-count">0 pages selected</span>
+                </div>
+                <div class="footer-actions">
+                    <button class="btn btn-secondary" onclick="closeAIAnalysisModal()">Cancel</button>
+                    <button class="btn btn-primary" id="run-analysis-btn" onclick="runAIAnalysis()" disabled>
+                        <i class="fas fa-magic"></i> Run Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Analysis Modal -->
+    <div id="save-analysis-modal" class="save-analysis-modal" onclick="closeSaveAnalysisModal(event)">
+        <div class="save-analysis-modal-content" onclick="event.stopPropagation()">
+            <div class="save-analysis-modal-header">
+                <h3>
+                    <i class="fas fa-save"></i>
+                    Save Analysis to Page
+                </h3>
+                <button class="document-modal-close" onclick="closeSaveAnalysisModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="save-analysis-modal-body">
+                <p>Save this analysis to the page it was triggered from:</p>
+                <div class="save-target-page" id="save-target-page">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Page <strong id="save-page-number">1</strong></span>
+                </div>
+
+                <div class="existing-analysis-warning" id="existing-analysis-warning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>This page already has saved analysis</strong>
+                        <p>Choose how to handle the existing analysis:</p>
+                    </div>
+                </div>
+
+                <div class="save-mode-options" id="save-mode-options" style="display: none;">
+                    <label class="save-mode-option">
+                        <input type="radio" name="save-mode" value="replace" checked>
+                        <span class="option-content">
+                            <i class="fas fa-sync-alt"></i>
+                            <strong>Replace</strong>
+                            <small>Remove existing analysis and save new one</small>
+                        </span>
+                    </label>
+                    <label class="save-mode-option">
+                        <input type="radio" name="save-mode" value="append">
+                        <span class="option-content">
+                            <i class="fas fa-plus-circle"></i>
+                            <strong>Append</strong>
+                            <small>Keep existing analysis and add new one</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <!-- Default footer with save options -->
+            <div class="save-analysis-modal-footer" id="save-modal-actions">
+                <button class="btn btn-secondary" onclick="closeSaveAnalysisModal()">Cancel</button>
+                <button class="btn btn-primary" id="confirm-save-btn" onclick="confirmSaveAnalysis()">
+                    <i class="fas fa-check"></i> Save Analysis
+                </button>
+            </div>
+            <!-- Success footer with navigation options -->
+            <div class="save-analysis-modal-footer save-success-footer" id="save-success-actions" style="display: none;">
+                <div class="save-success-message">
+                    <i class="fas fa-check-circle"></i>
+                    <span id="save-success-text">Analysis saved successfully!</span>
+                </div>
+                <div class="save-success-buttons">
+                    <button class="btn btn-secondary" onclick="continueAIAnalysis()">
+                        <i class="fas fa-robot"></i> Continue Analysis
+                    </button>
+                    <button class="btn btn-primary" onclick="goToSavedPage()">
+                        <i class="fas fa-arrow-right"></i> Go to Page
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Full Analysis Modal -->
+    <div id="view-analysis-modal" class="view-analysis-modal" onclick="closeViewAnalysisModal(event)">
+        <div class="view-analysis-modal-content" onclick="event.stopPropagation()">
+            <div class="view-analysis-modal-header">
+                <div class="view-analysis-header-info">
+                    <span class="view-analysis-type-badge" id="view-analysis-type">General</span>
+                    <span class="view-analysis-timestamp" id="view-analysis-timestamp">12/9/2025 04:08 PM</span>
+                </div>
+                <button class="document-modal-close" onclick="closeViewAnalysisModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="view-analysis-modal-meta">
+                <div class="view-analysis-pages" id="view-analysis-pages">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Based on pages: 4</span>
+                </div>
+                <div class="view-analysis-context" id="view-analysis-context" style="display: none;">
+                    <i class="fas fa-comment-dots"></i>
+                    <span id="view-analysis-context-text"></span>
+                </div>
+            </div>
+            <div class="view-analysis-modal-body">
+                <div class="view-analysis-content" id="view-analysis-content">
+                    <!-- Full analysis content will be populated here -->
+                </div>
+            </div>
+            <div class="view-analysis-modal-footer">
+                <button class="btn btn-secondary" onclick="copyViewedAnalysis()">
+                    <i class="fas fa-copy"></i> Copy to Clipboard
+                </button>
+                <button class="btn btn-primary" onclick="closeViewAnalysisModal()">
+                    <i class="fas fa-check"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=18"></script>
 </body>
 </html>

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itrimport.local/schemas/analysis-export.json",
+  "title": "AnalysisExport",
+  "description": "Complete analysis export format for downstream integration",
+  "type": "object",
+  "required": [
+    "report_id",
+    "pdf_filename",
+    "report_period",
+    "overall_analysis",
+    "sector_analyses",
+    "analysis_metadata"
+  ],
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "description": "Unique report identifier"
+    },
+    "pdf_filename": {
+      "type": "string",
+      "description": "Original PDF filename"
+    },
+    "report_period": {
+      "type": "string",
+      "description": "Report period (e.g., 'March 2024')"
+    },
+    "overall_analysis": {
+      "$ref": "overall-analysis.json",
+      "description": "Document-level analysis"
+    },
+    "sector_analyses": {
+      "type": "object",
+      "description": "Per-sector analyses indexed by sector name",
+      "properties": {
+        "core": { "$ref": "sector-analysis.json" },
+        "financial": { "$ref": "sector-analysis.json" },
+        "construction": { "$ref": "sector-analysis.json" },
+        "manufacturing": { "$ref": "sector-analysis.json" }
+      },
+      "additionalProperties": false
+    },
+    "analysis_metadata": {
+      "$ref": "#/definitions/AnalysisMetadata",
+      "description": "Metadata about analysis generation"
+    }
+  },
+  "definitions": {
+    "AnalysisMetadata": {
+      "type": "object",
+      "required": [
+        "version",
+        "generated_at",
+        "generator_version",
+        "llm_model",
+        "processing_time_seconds"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "Analysis schema version"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of generation"
+        },
+        "generator_version": {
+          "type": "string",
+          "description": "Software version that generated the analysis"
+        },
+        "llm_model": {
+          "type": "string",
+          "description": "LLM model used for analysis"
+        },
+        "processing_time_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time taken to generate analysis"
+        },
+        "regenerated_from_version": {
+          "type": "string",
+          "description": "Previous version if this was a regeneration"
+        }
+      }
+    }
+  }
+}

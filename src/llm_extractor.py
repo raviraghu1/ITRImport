@@ -474,6 +474,303 @@ What is the overall economic outlook based on this data?"""
         except json.JSONDecodeError:
             return {}
 
+    def generate_overall_analysis(
+        self,
+        document_summary: str,
+        sector_summaries: dict,
+        page_summaries: list[dict]
+    ) -> dict:
+        """Generate overall document analysis using LLM.
+
+        Args:
+            document_summary: Brief summary of the entire document
+            sector_summaries: Dictionary of sector -> summary text
+            page_summaries: List of page-level summaries
+
+        Returns:
+            Dictionary with executive_summary, key_themes, recommendations
+        """
+        system_prompt = """You are an expert economic analyst generating an overall analysis
+for an ITR Economics Trends Report. Synthesize the provided information into a comprehensive
+analysis.
+
+Return JSON:
+{
+    "executive_summary": "3-5 paragraph executive summary (500-1500 chars)",
+    "key_themes": [
+        {
+            "theme_name": "Short title",
+            "significance_score": 1-10,
+            "frequency": number,
+            "description": "2-3 sentences",
+            "affected_sectors": ["sector1", "sector2"],
+            "business_implications": "What this means"
+        }
+    ],
+    "cross_sector_trends": {
+        "overall_direction": "expanding/contracting/mixed/transitioning",
+        "sectors_in_growth": ["sector names"],
+        "sectors_in_decline": ["sector names"],
+        "trend_summary": "Summary of cross-sector dynamics"
+    },
+    "recommendations": ["recommendation 1", "recommendation 2", ...]
+}"""
+
+        sector_context = "\n".join([
+            f"- {sector}: {summary}"
+            for sector, summary in sector_summaries.items()
+        ])
+
+        user_prompt = f"""Analyze this ITR Economics Trends Report:
+
+Document Summary:
+{document_summary}
+
+Sector Summaries:
+{sector_context}
+
+Generate a comprehensive overall analysis with executive summary, themes, trends, and recommendations."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = re.sub(r'^```(?:json)?\n?', '', response)
+                response = re.sub(r'\n?```$', '', response)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {}
+
+    def generate_sector_analysis(
+        self,
+        sector: str,
+        series_data: list[dict],
+        page_summaries: list[dict]
+    ) -> dict:
+        """Generate analysis for a specific sector.
+
+        Args:
+            sector: Sector name (core, financial, construction, manufacturing)
+            series_data: List of series data for this sector
+            page_summaries: Page summaries for this sector
+
+        Returns:
+            Dictionary with sector analysis fields
+        """
+        system_prompt = """You are an expert economic analyst generating sector analysis
+for an ITR Economics Trends Report.
+
+Return JSON:
+{
+    "summary": "200-500 character sector summary",
+    "dominant_trend": "accelerating/slowing/stable/declining/recovering",
+    "leading_indicators": ["indicator1", "indicator2", "indicator3"],
+    "key_insights": ["insight 1", "insight 2", ...],
+    "business_phase": "A/B/C/D",
+    "correlations": [
+        {
+            "related_sector": "sector name",
+            "relationship": "leading/lagging/concurrent",
+            "strength": "strong/moderate/weak",
+            "description": "Brief explanation"
+        }
+    ]
+}"""
+
+        series_names = [s.get("series_name", "") for s in series_data[:10]]
+        summaries_text = "\n".join([
+            s.get("summary", "") for s in page_summaries[:5]
+        ])
+
+        user_prompt = f"""Analyze the {sector} sector from an ITR Economics Trends Report:
+
+Series in this sector: {', '.join(series_names)}
+
+Page summaries:
+{summaries_text[:2500]}
+
+Generate a comprehensive sector analysis."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = re.sub(r'^```(?:json)?\n?', '', response)
+                response = re.sub(r'\n?```$', '', response)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {}
+
+    def calculate_sentiment(
+        self,
+        sector_analyses: dict,
+        chart_interpretations: list[dict]
+    ) -> dict:
+        """Calculate overall sentiment score using LLM.
+
+        Args:
+            sector_analyses: Dictionary of sector -> analysis data
+            chart_interpretations: List of chart interpretation data
+
+        Returns:
+            Dictionary with sentiment score data
+        """
+        system_prompt = """You are an expert economic analyst calculating a sentiment score
+for an ITR Economics Trends Report.
+
+Use a 5-point scale:
+1 = Strongly Bearish (severe recession indicators)
+2 = Bearish (decline/contraction)
+3 = Neutral (mixed signals)
+4 = Bullish (growth/expansion)
+5 = Strongly Bullish (strong growth indicators)
+
+Return JSON:
+{
+    "score": 1-5,
+    "confidence": "high/medium/low",
+    "contributing_factors": [
+        {
+            "factor_name": "Factor description",
+            "impact": "positive/negative/neutral",
+            "weight": 0.0-1.0,
+            "description": "Brief explanation"
+        }
+    ],
+    "rationale": "Explanation of the score"
+}"""
+
+        sector_context = "\n".join([
+            f"- {sector}: {data.get('dominant_trend', 'unknown')} trend, Phase {data.get('business_phase', '?')}"
+            for sector, data in sector_analyses.items()
+        ])
+
+        trend_context = "\n".join([
+            f"- {interp.get('series_name', 'Unknown')}: {interp.get('metadata', {}).get('trend_direction', 'unknown')}"
+            for interp in chart_interpretations[:10]
+        ])
+
+        user_prompt = f"""Calculate the overall economic sentiment from this data:
+
+Sector Analysis:
+{sector_context}
+
+Chart Trends:
+{trend_context}
+
+Provide a sentiment score with detailed justification."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = re.sub(r'^```(?:json)?\n?', '', response)
+                response = re.sub(r'\n?```$', '', response)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {"score": 3, "confidence": "low", "rationale": "Unable to calculate sentiment"}
+
+    def identify_themes(self, insights: list[str], page_numbers: list[int]) -> list[dict]:
+        """Identify recurring themes from document insights.
+
+        Args:
+            insights: List of key insights from the document
+            page_numbers: List of page numbers where insights were found
+
+        Returns:
+            List of theme dictionaries
+        """
+        if not insights:
+            return []
+
+        system_prompt = """You are an economic analyst identifying themes in ITR Economics reports.
+
+For each theme, provide:
+- theme_name: Short title (3-5 words)
+- significance_score: 1-10 importance
+- frequency: Approximate number of related mentions
+- description: 2-3 sentence description
+- affected_sectors: List of affected sectors
+- business_implications: What this means for businesses
+
+Return JSON array of 5-7 themes."""
+
+        user_prompt = f"""Identify key themes from these economic insights:
+
+{chr(10).join(insights[:30])}
+
+Return themes as a JSON array."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = re.sub(r'^```(?:json)?\n?', '', response)
+                response = re.sub(r'\n?```$', '', response)
+
+            themes = json.loads(response)
+
+            # Add source pages to each theme
+            for theme in themes:
+                theme["source_pages"] = page_numbers[:5]
+
+            return themes
+        except json.JSONDecodeError:
+            return []
+
+    def identify_correlations(
+        self,
+        sector: str,
+        series_data: list[dict],
+        other_sectors: list[str]
+    ) -> list[dict]:
+        """Identify correlations between sectors.
+
+        Args:
+            sector: Current sector being analyzed
+            series_data: Series data for the current sector
+            other_sectors: List of other sector names
+
+        Returns:
+            List of correlation dictionaries
+        """
+        system_prompt = """You are an economic analyst identifying correlations between sectors.
+
+Return JSON array of correlations:
+[
+    {
+        "related_sector": "sector name",
+        "relationship": "leading/lagging/concurrent",
+        "lag_months": number or null,
+        "strength": "strong/moderate/weak",
+        "description": "Brief explanation"
+    }
+]"""
+
+        series_names = [s.get("series_name", "") for s in series_data[:5]]
+
+        user_prompt = f"""Identify correlations between the {sector} sector and other sectors.
+
+{sector} sector series: {', '.join(series_names)}
+Other sectors: {', '.join(other_sectors)}
+
+Based on typical economic relationships, identify likely correlations."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = re.sub(r'^```(?:json)?\n?', '', response)
+                response = re.sub(r'\n?```$', '', response)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return []
+
     def close(self):
         """Close the HTTP client."""
         self.client.close()

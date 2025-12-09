@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itrimport.local/schemas/sector-analysis.json",
+  "title": "SectorAnalysis",
+  "description": "Analysis for a specific economic sector",
+  "type": "object",
+  "required": [
+    "sector_name",
+    "summary",
+    "series_count",
+    "phase_distribution",
+    "dominant_trend",
+    "leading_indicators",
+    "business_phase",
+    "key_insights",
+    "source_pages"
+  ],
+  "properties": {
+    "sector_name": {
+      "type": "string",
+      "enum": ["core", "financial", "construction", "manufacturing"],
+      "description": "Sector identifier"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 200,
+      "maxLength": 1000,
+      "description": "LLM-generated sector summary"
+    },
+    "series_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of economic series in this sector"
+    },
+    "phase_distribution": {
+      "type": "object",
+      "description": "Count of series in each business cycle phase",
+      "properties": {
+        "A": { "type": "integer", "minimum": 0 },
+        "B": { "type": "integer", "minimum": 0 },
+        "C": { "type": "integer", "minimum": 0 },
+        "D": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "dominant_trend": {
+      "type": "string",
+      "enum": ["accelerating", "slowing", "stable", "declining", "recovering"],
+      "description": "Overall trend direction for the sector"
+    },
+    "leading_indicators": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      },
+      "description": "Top 3 leading indicators for this sector"
+    },
+    "business_phase": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D"],
+      "description": "Overall sector business cycle phase"
+    },
+    "correlations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Correlation"
+      },
+      "description": "Relationships with other sectors"
+    },
+    "key_insights": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 300
+      },
+      "description": "Sector-specific insights"
+    },
+    "source_pages": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "description": "Page numbers containing sector data"
+    }
+  },
+  "definitions": {
+    "Correlation": {
+      "type": "object",
+      "required": ["related_sector", "relationship", "strength"],
+      "properties": {
+        "related_sector": {
+          "type": "string",
+          "enum": ["core", "financial", "construction", "manufacturing"]
+        },
+        "relationship": {
+          "type": "string",
+          "enum": ["leading", "lagging", "concurrent"]
+        },
+        "lag_months": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "strength": {
+          "type": "string",
+          "enum": ["strong", "moderate", "weak"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    }
+  }
+}

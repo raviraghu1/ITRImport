@@ -10,8 +10,10 @@ Per Constitution Principle III (Structured Data Model):
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class Sector(Enum):
@@ -28,6 +30,159 @@ class BusinessPhase(Enum):
     PHASE_B = "B"  # Accelerating Growth
     PHASE_C = "C"  # Slowing Growth
     PHASE_D = "D"  # Recession
+
+
+# =============================================================================
+# Analysis Models (Pydantic) - T004-T013
+# =============================================================================
+
+class ConfidenceLevel(str, Enum):
+    """Confidence level for analysis results."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class TrendDirection(str, Enum):
+    """Direction of economic trend."""
+    RISING = "rising"
+    FALLING = "falling"
+    STABLE = "stable"
+
+
+class SentimentLabel(str, Enum):
+    """5-point sentiment scale labels."""
+    STRONGLY_BEARISH = "Strongly Bearish"
+    BEARISH = "Bearish"
+    NEUTRAL = "Neutral"
+    BULLISH = "Bullish"
+    STRONGLY_BULLISH = "Strongly Bullish"
+
+
+class AnalysisBusinessPhase(str, Enum):
+    """Business cycle phase for analysis models."""
+    A = "A"  # Recovery
+    B = "B"  # Accelerating Growth
+    C = "C"  # Slowing Growth
+    D = "D"  # Recession
+
+
+class ContributingFactor(BaseModel):
+    """A factor that influenced the sentiment score."""
+    factor_name: str
+    impact: str = Field(description="positive, negative, or neutral")
+    weight: float = Field(ge=0.0, le=1.0)
+    description: str
+
+
+class IndicatorSignal(BaseModel):
+    """Individual economic indicator direction signal."""
+    indicator_name: str
+    sector: str
+    direction: TrendDirection
+    phase: Optional[AnalysisBusinessPhase] = None
+    source_page: int
+
+
+class Correlation(BaseModel):
+    """Relationship between economic sectors or indicators."""
+    related_sector: str
+    relationship: str = Field(description="leading, lagging, or concurrent")
+    lag_months: Optional[int] = None
+    strength: str = Field(description="strong, moderate, or weak")
+    description: Optional[str] = None
+
+
+class Theme(BaseModel):
+    """A recurring economic topic identified across the report."""
+    theme_name: str
+    significance_score: float = Field(ge=1.0, le=10.0)
+    frequency: int = Field(ge=1)
+    description: str
+    affected_sectors: List[str]
+    source_pages: List[int]
+    business_implications: str
+
+
+class SentimentScore(BaseModel):
+    """5-point economic sentiment classification with structured context."""
+    score: int = Field(ge=1, le=5)
+    label: SentimentLabel
+    confidence: ConfidenceLevel
+    contributing_factors: List[ContributingFactor]
+    sector_weights: Dict[str, float]
+    indicator_signals: List[IndicatorSignal]
+    rationale: str
+
+    @field_validator('sector_weights')
+    @classmethod
+    def weights_sum_to_one(cls, v):
+        if not v:
+            return v
+        total = sum(v.values())
+        if not (0.99 <= total <= 1.01):
+            raise ValueError(f'sector_weights must sum to 1.0, got {total}')
+        return v
+
+    @field_validator('label')
+    @classmethod
+    def label_matches_score(cls, v, info):
+        score = info.data.get('score')
+        if score is None:
+            return v
+        score_labels = {
+            1: SentimentLabel.STRONGLY_BEARISH,
+            2: SentimentLabel.BEARISH,
+            3: SentimentLabel.NEUTRAL,
+            4: SentimentLabel.BULLISH,
+            5: SentimentLabel.STRONGLY_BULLISH
+        }
+        expected = score_labels.get(score)
+        if expected and v != expected:
+            raise ValueError(f'label {v} does not match score {score}, expected {expected}')
+        return v
+
+
+class CrossSectorTrends(BaseModel):
+    """Aggregated view of trends across all sectors."""
+    overall_direction: str = Field(description="expanding, contracting, mixed, or transitioning")
+    sectors_in_growth: List[str]
+    sectors_in_decline: List[str]
+    sector_correlations: List[Correlation]
+    trend_summary: str
+
+
+class SectorAnalysis(BaseModel):
+    """Analysis for a specific economic sector."""
+    sector_name: str
+    summary: str = Field(min_length=50, max_length=2000)
+    series_count: int
+    phase_distribution: Dict[str, int]  # {"A": 2, "B": 3, "C": 5, "D": 2}
+    dominant_trend: str = Field(description="accelerating, slowing, stable, declining, or recovering")
+    leading_indicators: List[str] = Field(default_factory=list)
+    business_phase: AnalysisBusinessPhase
+    correlations: List[Correlation] = Field(default_factory=list)
+    key_insights: List[str] = Field(default_factory=list)
+    source_pages: List[int]
+
+
+class OverallAnalysis(BaseModel):
+    """Complete document-level analysis synthesizing all economic indicators."""
+    executive_summary: str = Field(min_length=100, max_length=5000)
+    key_themes: List[Theme] = Field(default_factory=list)
+    cross_sector_trends: CrossSectorTrends
+    recommendations: List[str] = Field(default_factory=list)
+    sentiment_score: SentimentScore
+
+
+class AnalysisMetadata(BaseModel):
+    """Metadata about the analysis generation."""
+    version: str = "1.0"
+    generated_at: datetime
+    generator_version: str
+    llm_model: str
+    processing_time_seconds: float
+    regenerated_from_version: Optional[str] = None
 
 
 @dataclass

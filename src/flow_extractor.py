@@ -22,6 +22,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 
 from .models import Sector, BusinessPhase
+from .analysis_generator import AnalysisGenerator
 
 
 @dataclass
@@ -586,8 +587,15 @@ Format as a cohesive summary paragraph."""
 
         return page_flow
 
-    def extract_full_document_flow(self) -> Dict[str, Any]:
-        """Extract the complete document flow."""
+    def extract_full_document_flow(self, generate_analysis: bool = True) -> Dict[str, Any]:
+        """Extract the complete document flow.
+
+        Args:
+            generate_analysis: If True, generate overall and sector analysis using LLM
+
+        Returns:
+            Complete document dictionary with optional analysis
+        """
         if not self.doc:
             raise RuntimeError("PDF not opened. Call open() first.")
 
@@ -638,6 +646,16 @@ Format as a cohesive summary paragraph."""
             # Aggregated insights
             "aggregated_insights": self._aggregate_insights(series_pages)
         }
+
+        # Generate analysis if requested
+        if generate_analysis:
+            analysis_generator = AnalysisGenerator(self.llm)
+            analysis_result = analysis_generator.generate_analysis(document)
+
+            # Add analysis fields to document
+            document["overall_analysis"] = analysis_result.get("overall_analysis")
+            document["sector_analyses"] = analysis_result.get("sector_analyses")
+            document["analysis_metadata"] = analysis_result.get("analysis_metadata")
 
         return document
 

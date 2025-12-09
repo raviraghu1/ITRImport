@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itrimport.local/schemas/overall-analysis.json",
+  "title": "OverallAnalysis",
+  "description": "Complete document-level analysis synthesizing all economic indicators",
+  "type": "object",
+  "required": [
+    "executive_summary",
+    "key_themes",
+    "cross_sector_trends",
+    "recommendations",
+    "sentiment_score"
+  ],
+  "properties": {
+    "executive_summary": {
+      "type": "string",
+      "minLength": 100,
+      "maxLength": 2000,
+      "description": "3-5 paragraph synthesis of the entire report"
+    },
+    "key_themes": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/definitions/Theme"
+      },
+      "description": "Top 5-10 recurring themes ranked by significance"
+    },
+    "cross_sector_trends": {
+      "$ref": "#/definitions/CrossSectorTrends",
+      "description": "Relationships between economic sectors"
+    },
+    "recommendations": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 500
+      },
+      "description": "Actionable business recommendations"
+    },
+    "sentiment_score": {
+      "$ref": "#/definitions/SentimentScore",
+      "description": "Overall economic sentiment with structured context"
+    }
+  },
+  "definitions": {
+    "Theme": {
+      "type": "object",
+      "required": [
+        "theme_name",
+        "significance_score",
+        "frequency",
+        "description",
+        "affected_sectors",
+        "source_pages",
+        "business_implications"
+      ],
+      "properties": {
+        "theme_name": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 100
+        },
+        "significance_score": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 10.0
+        },
+        "frequency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 50,
+          "maxLength": 500
+        },
+        "affected_sectors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["core", "financial", "construction", "manufacturing"]
+          }
+        },
+        "source_pages": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "business_implications": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 500
+        }
+      }
+    },
+    "CrossSectorTrends": {
+      "type": "object",
+      "required": [
+        "overall_direction",
+        "sectors_in_growth",
+        "sectors_in_decline",
+        "sector_correlations",
+        "trend_summary"
+      ],
+      "properties": {
+        "overall_direction": {
+          "type": "string",
+          "enum": ["expanding", "contracting", "mixed", "transitioning"]
+        },
+        "sectors_in_growth": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["core", "financial", "construction", "manufacturing"]
+          }
+        },
+        "sectors_in_decline": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["core", "financial", "construction", "manufacturing"]
+          }
+        },
+        "sector_correlations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Correlation"
+          }
+        },
+        "trend_summary": {
+          "type": "string",
+          "minLength": 100,
+          "maxLength": 1000
+        }
+      }
+    },
+    "Correlation": {
+      "type": "object",
+      "required": ["related_sector", "relationship", "strength"],
+      "properties": {
+        "related_sector": {
+          "type": "string",
+          "enum": ["core", "financial", "construction", "manufacturing"]
+        },
+        "relationship": {
+          "type": "string",
+          "enum": ["leading", "lagging", "concurrent"]
+        },
+        "lag_months": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "strength": {
+          "type": "string",
+          "enum": ["strong", "moderate", "weak"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "SentimentScore": {
+      "type": "object",
+      "required": [
+        "score",
+        "label",
+        "confidence",
+        "contributing_factors",
+        "sector_weights",
+        "indicator_signals",
+        "rationale"
+      ],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "1=Strongly Bearish, 5=Strongly Bullish"
+        },
+        "label": {
+          "type": "string",
+          "enum": [
+            "Strongly Bearish",
+            "Bearish",
+            "Neutral",
+            "Bullish",
+            "Strongly Bullish"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "contributing_factors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContributingFactor"
+          }
+        },
+        "sector_weights": {
+          "type": "object",
+          "description": "Sector contribution weights summing to 1.0",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "indicator_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IndicatorSignal"
+          }
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 50,
+          "maxLength": 1000
+        }
+      }
+    },
+    "ContributingFactor": {
+      "type": "object",
+      "required": ["factor_name", "impact", "weight", "description"],
+      "properties": {
+        "factor_name": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["positive", "negative", "neutral"]
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "IndicatorSignal": {
+      "type": "object",
+      "required": ["indicator_name", "sector", "direction", "source_page"],
+      "properties": {
+        "indicator_name": {
+          "type": "string"
+        },
+        "sector": {
+          "type": "string",
+          "enum": ["core", "financial", "construction", "manufacturing"]
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["rising", "falling", "stable"]
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["A", "B", "C", "D"]
+        },
+        "source_page": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
