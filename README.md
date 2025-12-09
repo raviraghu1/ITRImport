@@ -8,6 +8,7 @@ Extract, analyze, and store economic data from ITR Economics Trends Report PDFs 
 
 ## Features
 
+- **REST API**: FastAPI server for portal integration with async processing
 - **Automated Workflow**: End-to-end processing with a single command
 - **File Watcher**: Automatic processing when new PDFs are uploaded
 - **PDF Data Extraction**: Extract 30+ economic series from ITR Trends Reports
@@ -59,6 +60,111 @@ python create_consolidated_docs.py
 
 # Create flow-based documents with vision analysis
 python create_flow_document.py
+
+# === API Server (for portal integration) ===
+
+# Start the API server
+python api.py
+
+# Or with uvicorn directly
+uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## REST API
+
+The `api.py` provides a FastAPI server for portal integration.
+
+### Start the Server
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the server
+python api.py
+# Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
+```
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/upload` | Upload PDF and process synchronously |
+| `POST` | `/upload/async` | Upload PDF and process asynchronously |
+| `GET` | `/status/{job_id}` | Check async job status |
+| `GET` | `/reports` | List all processed reports |
+| `GET` | `/reports/{id}` | Get specific report data |
+| `GET` | `/reports/{id}/charts` | Get all chart interpretations |
+| `GET` | `/reports/{id}/series` | Get all series from report |
+| `DELETE` | `/reports/{id}` | Delete a report |
+| `GET` | `/health` | Health check |
+
+### Example: Upload PDF (Sync)
+
+```bash
+curl -X POST "http://localhost:8000/upload" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@Files/TR Complete March 2024.pdf"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "PDF processed successfully",
+  "report_id": "tr_complete_march_2024",
+  "filename": "TR Complete March 2024.pdf",
+  "statistics": {
+    "total_pages": 58,
+    "total_series": 31,
+    "total_charts": 158,
+    "llm_interpretations": 158
+  }
+}
+```
+
+### Example: Upload PDF (Async)
+
+```bash
+# Upload and get job ID
+curl -X POST "http://localhost:8000/upload/async" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@Files/TR Complete March 2024.pdf"
+
+# Response: {"job_id": "abc123...", "status_url": "/status/abc123..."}
+
+# Check status
+curl "http://localhost:8000/status/abc123..."
+```
+
+### Example: JavaScript/TypeScript
+
+```typescript
+// Upload PDF from portal
+async function uploadPDF(file: File): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch('http://localhost:8000/upload/async', {
+    method: 'POST',
+    body: formData
+  });
+
+  return response.json();
+}
+
+// Check job status
+async function checkStatus(jobId: string): Promise<JobStatus> {
+  const response = await fetch(`http://localhost:8000/status/${jobId}`);
+  return response.json();
+}
+
+// Get all reports
+async function getReports(): Promise<Report[]> {
+  const response = await fetch('http://localhost:8000/reports');
+  return response.json();
+}
 ```
 
 ## System Architecture
@@ -336,6 +442,7 @@ db.ITRextract_Flow.aggregate([
 
 ```
 ITRImport/
+├── api.py                     # FastAPI server for portal integration
 ├── workflow.py                # Automated end-to-end workflow (RECOMMENDED)
 ├── create_flow_document.py    # Flow-based extraction with vision
 ├── main_enhanced.py           # Main extraction entry point
