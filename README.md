@@ -70,6 +70,33 @@ python api.py
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+## Report Viewer
+
+The `viewer/` directory contains a web application for viewing and analyzing reports.
+
+### Start the Viewer
+
+```bash
+python viewer/server.py
+# Open http://localhost:8080
+```
+
+### Viewer Features
+
+- **Side-by-Side View**: PDF displayed alongside extracted data
+- **LLM Analysis Tab**: View all GPT-4 Vision chart interpretations
+- **Page Linking**: Click to jump to specific PDF pages
+- **Ask AI**: Compare extracted data with PDF, analyze trends
+- **Quick Prompts**: One-click analysis queries
+
+### Ask AI Examples
+
+- "Compare the extracted series with the PDF"
+- "What are the key economic trends?"
+- "Which series are in recession phase?"
+- "Summarize the forecast outlook"
+- "Are there any discrepancies in the extracted data?"
+
 ## REST API
 
 The `api.py` provides a FastAPI server for portal integration.
@@ -448,6 +475,13 @@ ITRImport/
 ├── main_enhanced.py           # Main extraction entry point
 ├── import_to_mongodb.py       # Import data to MongoDB
 ├── create_consolidated_docs.py # Create single doc per PDF
+├── viewer/                    # Web viewer application
+│   ├── server.py              # Viewer FastAPI server
+│   ├── templates/
+│   │   └── index.html         # Main viewer page
+│   └── static/
+│       ├── css/styles.css     # Styling (matches portal design)
+│       └── js/app.js          # Frontend JavaScript
 ├── src/
 │   ├── models.py              # Data models
 │   ├── enhanced_parser.py     # PDF parsing with context

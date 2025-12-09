@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITR Report Viewer - AI-Powered Economic Analysis</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <i class="fas fa-chart-line" style="font-size: 1.5rem; color: var(--color-primary);"></i>
+                <h1>ITR Report Viewer</h1>
+                <span class="comparison-indicator" id="comparison-mode" style="display: none;">
+                    <i class="fas fa-code-compare"></i>
+                    Comparison Mode Active
+                </span>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="uploadPDF()">
+                    <i class="fas fa-upload"></i>
+                    Upload PDF
+                </button>
+                <button class="btn btn-primary" onclick="refreshReports()">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Sidebar - Report List -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Reports</h2>
+                <span id="report-count" class="report-card-badge">0</span>
+            </div>
+            <div class="report-list" id="report-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading reports...</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- PDF Viewer Panel -->
+            <div class="pdf-panel">
+                <div class="panel-header">
+                    <h3>
+                        <i class="fas fa-file-pdf"></i>
+                        Original PDF
+                    </h3>
+                    <div class="page-nav">
+                        <button class="btn btn-icon btn-secondary" onclick="prevPage()">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="page-info" id="page-info">Page 1 of 1</span>
+                        <button class="btn btn-icon btn-secondary" onclick="nextPage()">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <iframe id="pdf-viewer" class="pdf-viewer" src="about:blank"></iframe>
+                </div>
+            </div>
+
+            <!-- Extracted Data Panel -->
+            <div class="data-panel">
+                <div class="data-tabs">
+                    <button class="data-tab active" data-tab="overview" onclick="switchTab('overview')">
+                        <i class="fas fa-th-large"></i> Overview
+                    </button>
+                    <button class="data-tab" data-tab="series" onclick="switchTab('series')">
+                        <i class="fas fa-chart-bar"></i> Series
+                    </button>
+                    <button class="data-tab" data-tab="charts" onclick="switchTab('charts')">
+                        <i class="fas fa-eye"></i> LLM Analysis
+                    </button>
+                    <button class="data-tab" data-tab="raw" onclick="switchTab('raw')">
+                        <i class="fas fa-code"></i> Raw Data
+                    </button>
+                </div>
+
+                <!-- Overview Tab -->
+                <div class="tab-content active" id="tab-overview">
+                    <div id="overview-content">
+                        <div class="loading">
+                            <p>Select a report to view details</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Series Tab -->
+                <div class="tab-content" id="tab-series">
+                    <div id="series-content">
+                        <div class="loading">
+                            <p>No series data available</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts/LLM Analysis Tab -->
+                <div class="tab-content" id="tab-charts">
+                    <div id="charts-content">
+                        <div class="loading">
+                            <p>No chart analysis available</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw Data Tab -->
+                <div class="tab-content" id="tab-raw">
+                    <pre id="raw-content" style="font-size: 12px; overflow: auto; max-height: 600px;">
+Select a report to view raw JSON data
+                    </pre>
+                </div>
+            </div>
+        </main>
+
+        <!-- AI Chat Panel -->
+        <aside class="ai-panel">
+            <div class="ai-header">
+                <h3>
+                    <i class="fas fa-robot"></i>
+                    Ask AI
+                </h3>
+            </div>
+            <div class="ai-messages" id="ai-messages">
+                <div class="ai-message assistant fade-in">
+                    <p><strong>Welcome!</strong> I can help you analyze ITR Economics reports.</p>
+                    <p>Ask me to:</p>
+                    <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                        <li>Compare extracted data with the PDF</li>
+                        <li>Explain chart interpretations</li>
+                        <li>Summarize economic trends</li>
+                        <li>Find specific series or forecasts</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="ai-input-container">
+                <div class="ai-input-wrapper">
+                    <textarea
+                        class="ai-input"
+                        id="ai-input"
+                        placeholder="Ask about the report..."
+                        rows="2"
+                        onkeydown="handleAIInput(event)"
+                    ></textarea>
+                    <button class="btn btn-primary btn-icon" onclick="sendAIMessage()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="quick-prompts">
+                    <button class="quick-prompt" onclick="askQuickPrompt('Compare the extracted series with the PDF')">
+                        Compare with PDF
+                    </button>
+                    <button class="quick-prompt" onclick="askQuickPrompt('What are the key economic trends?')">
+                        Key Trends
+                    </button>
+                    <button class="quick-prompt" onclick="askQuickPrompt('Which series are in recession phase?')">
+                        Recession Phase
+                    </button>
+                    <button class="quick-prompt" onclick="askQuickPrompt('Summarize the forecast outlook')">
+                        Forecast Summary
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Upload PDF Report</h3>
+            <input type="file" id="pdf-file" accept=".pdf">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitUpload()">Upload & Process</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
