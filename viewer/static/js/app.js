@@ -38,7 +38,7 @@ async function loadReports() {
         }
 
         reportList.innerHTML = reports.map(report => `
-            <div class="report-card fade-in" onclick="selectReport('${report.report_id}')">
+            <div class="report-card fade-in" data-report-id="${report.report_id}" onclick="selectReport('${report.report_id}')">
                 <div class="report-card-title">${report.pdf_filename}</div>
                 <div class="report-card-meta">
                     <span class="report-card-badge">
@@ -81,13 +81,25 @@ async function loadReports() {
 async function selectReport(reportId) {
     // Update active state
     document.querySelectorAll('.report-card').forEach(card => card.classList.remove('active'));
-    event?.target?.closest('.report-card')?.classList.add('active');
+
+    // Find and highlight the selected card using data attribute
+    const selectedCard = document.querySelector(`.report-card[data-report-id="${reportId}"]`);
+    if (selectedCard) {
+        selectedCard.classList.add('active');
+    }
 
     try {
+        console.log('Loading report:', reportId);
         const response = await fetch(`${API_BASE}/api/reports/${reportId}`);
-        if (!response.ok) throw new Error('Failed to load report');
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API error ${response.status}: ${errorText}`);
+        }
 
         currentReport = await response.json();
+        console.log('Report loaded:', currentReport.report_id);
+
         totalPages = currentReport.metadata?.total_pages || 1;
         currentPage = 1;
 
@@ -110,9 +122,11 @@ async function selectReport(reportId) {
         // Add to AI context
         addAIContext();
 
+        console.log('Report display complete');
+
     } catch (error) {
         console.error('Error loading report:', error);
-        showError('Failed to load report details');
+        showError(`Failed to load report: ${error.message}`);
     }
 }
 
@@ -128,6 +142,112 @@ function updatePDFViewer() {
     }
 
     pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+    // Update page indicator in data panel
+    const pageIndicator = document.getElementById('current-page-indicator');
+    if (pageIndicator) {
+        pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+    }
+
+    // Update the synced data panel to show current page content
+    updateCurrentPageData();
+}
+
+// Update data panel to show content for current page
+function updateCurrentPageData() {
+    if (!currentReport?.document_flow) return;
+
+    const pageData = currentReport.document_flow.find(p => p.page_number === currentPage);
+    const content = document.getElementById('page-data-content');
+
+    if (!content) return;
+
+    if (!pageData) {
+        content.innerHTML = `
+            <div class="page-data-empty">
+                <i class="fas fa-file-alt" style="font-size: 2rem; opacity: 0.3;"></i>
+                <p>No extracted data for page ${currentPage}</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Get series info if available
+    const seriesName = pageData.series_name;
+    const seriesData = seriesName ? currentReport.series_index?.[seriesName] : null;
+    const sector = pageData.sector || seriesData?.sector || '';
+
+    // Get text blocks
+    const textBlocks = pageData.blocks?.filter(b => b.block_type === 'text') || [];
+    const textContent = textBlocks.map(b => b.content).join('\n\n');
+
+    // Get chart interpretation
+    let chartInterp = null;
+    for (const block of pageData.blocks || []) {
+        if (block.block_type === 'chart' && block.interpretation) {
+            chartInterp = block.interpretation;
+            break;
+        }
+    }
+
+    content.innerHTML = `
+        <div class="page-data-card fade-in">
+            ${seriesName ? `
+                <div class="page-data-header">
+                    <h4>${seriesName}</h4>
+                    ${sector ? `<span class="series-sector">${sector}</span>` : ''}
+                </div>
+            ` : `
+                <div class="page-data-header">
+                    <h4>Page ${currentPage}</h4>
+                </div>
+            `}
+
+            ${seriesData?.summary ? `
+                <div class="page-data-section">
+                    <h5><i class="fas fa-file-alt"></i> Summary</h5>
+                    <p class="summary-text">${seriesData.summary}</p>
+                </div>
+            ` : ''}
+
+            ${chartInterp ? `
+                <div class="page-data-section">
+                    <h5><i class="fas fa-chart-line"></i> Chart Analysis</h5>
+                    <div class="chart-analysis">
+                        <div class="analysis-meta">
+                            ${chartInterp.current_phase ? `
+                                <span class="chart-phase phase-${chartInterp.current_phase}">Phase ${chartInterp.current_phase}</span>
+                            ` : ''}
+                            ${chartInterp.trend_direction ? `
+                                <span class="meta-badge trend-${chartInterp.trend_direction === 'rising' ? 'rising' : chartInterp.trend_direction === 'falling' ? 'falling' : 'stable'}">
+                                    <i class="fas fa-${chartInterp.trend_direction === 'rising' ? 'arrow-up' : chartInterp.trend_direction === 'falling' ? 'arrow-down' : 'minus'}"></i>
+                                    ${chartInterp.trend_direction}
+                                </span>
+                            ` : ''}
+                        </div>
+                        <p>${chartInterp.description || ''}</p>
+                        ${chartInterp.business_implications ? `
+                            <p class="implications"><strong>Implications:</strong> ${chartInterp.business_implications}</p>
+                        ` : ''}
+                    </div>
+                </div>
+            ` : ''}
+
+            ${textContent ? `
+                <div class="page-data-section">
+                    <h5><i class="fas fa-paragraph"></i> Extracted Text</h5>
+                    <div class="extracted-text">${textContent}</div>
+                </div>
+            ` : ''}
+
+            <div class="page-data-actions">
+                <button class="btn btn-secondary btn-sm" onclick="openDocumentModal('${(seriesName || '').replace(/'/g, "\\'")}', ${currentPage})">
+                    <i class="fas fa-expand"></i>
+                    View Full Details
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 // Page navigation
@@ -159,6 +279,16 @@ function goToPage(pageNum) {
     }
 }
 
+// Helper to get series names from series_index (handles both dict and array)
+function getSeriesNames() {
+    if (!currentReport?.series_index) return [];
+    if (Array.isArray(currentReport.series_index)) {
+        return currentReport.series_index;
+    }
+    // series_index is a dict with series names as keys
+    return Object.keys(currentReport.series_index);
+}
+
 // Update overview tab
 function updateOverview() {
     const content = document.getElementById('overview-content');
@@ -169,7 +299,8 @@ function updateOverview() {
     }
 
     const metadata = currentReport.metadata || {};
-    const seriesCount = currentReport.series_index?.length || 0;
+    const seriesNames = getSeriesNames();
+    const seriesCount = seriesNames.length;
 
     content.innerHTML = `
         <div class="series-card slide-down">
@@ -205,7 +336,7 @@ function updateOverview() {
             </div>
             <div class="series-content">
                 <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
-                    ${(currentReport.series_index || []).map(s => `
+                    ${seriesNames.map(s => `
                         <span class="meta-badge" style="cursor: pointer;" onclick="findSeriesPage('${s}')">${s}</span>
                     `).join('')}
                 </div>
@@ -256,17 +387,22 @@ function updateSeries() {
     content.innerHTML = seriesPages.map(page => {
         const textBlocks = page.blocks?.filter(b => b.block_type === 'text') || [];
         const textContent = textBlocks.map(b => b.content).join(' ').substring(0, 300);
+        const escapedSeriesName = (page.series_name || '').replace(/'/g, "\\'");
 
         return `
-            <div class="series-card fade-in">
+            <div class="series-card clickable fade-in" onclick="openDocumentModal('${escapedSeriesName}', ${page.page_number})">
                 <div class="series-header">
                     <span class="series-name">${page.series_name}</span>
                     <span class="series-sector">${page.sector || 'Unknown'}</span>
                 </div>
                 <div class="series-content">
                     <p>${textContent}${textContent.length >= 300 ? '...' : ''}</p>
+                    <div class="view-full">
+                        <i class="fas fa-expand"></i>
+                        Click to view full document
+                    </div>
                     <div style="margin-top: 0.5rem;">
-                        <span class="link-to-pdf" onclick="goToPage(${page.page_number})">
+                        <span class="link-to-pdf" onclick="event.stopPropagation(); goToPage(${page.page_number})">
                             <i class="fas fa-external-link-alt"></i>
                             View in PDF (Page ${page.page_number})
                         </span>
@@ -308,9 +444,10 @@ function updateCharts() {
         const interp = chart.interpretation || {};
         const phase = interp.current_phase || '?';
         const trend = interp.trend_direction || 'unknown';
+        const escapedSeriesName = (chart.series_name || '').replace(/'/g, "\\'");
 
         return `
-            <div class="chart-card fade-in">
+            <div class="chart-card clickable fade-in" onclick="openDocumentModal('${escapedSeriesName}', ${chart.page_number})">
                 <div class="chart-header">
                     <div>
                         <div class="chart-type">${chart.series_name || 'Unknown Series'}</div>
@@ -345,7 +482,7 @@ function updateCharts() {
                         <i class="fas fa-star"></i>
                         Confidence: ${interp.confidence || 'unknown'}
                     </span>
-                    <span class="link-to-pdf" onclick="goToPage(${chart.page_number})">
+                    <span class="link-to-pdf" onclick="event.stopPropagation(); goToPage(${chart.page_number})">
                         <i class="fas fa-external-link-alt"></i>
                         View in PDF
                     </span>
@@ -359,6 +496,10 @@ function updateCharts() {
                         </div>
                     </div>
                 ` : ''}
+                <div class="view-full">
+                    <i class="fas fa-expand"></i>
+                    Click to view full document
+                </div>
             </div>
         `;
     }).join('');
@@ -392,12 +533,13 @@ function findSeriesPage(seriesName) {
 function addAIContext() {
     if (!currentReport) return;
 
+    const seriesNames = getSeriesNames();
     const contextMessage = `
 I've loaded the report: **${currentReport.pdf_filename}**
 
 - Report Period: ${currentReport.report_period || 'Unknown'}
 - Total Pages: ${currentReport.metadata?.total_pages || 0}
-- Series Extracted: ${currentReport.series_index?.length || 0}
+- Series Extracted: ${seriesNames.length}
 - Charts Analyzed: ${currentReport.metadata?.total_charts || 0}
 - LLM Interpretations: ${countInterpretations()}
 
@@ -438,7 +580,7 @@ async function sendAIMessage() {
                 context: {
                     report: currentReport?.pdf_filename,
                     period: currentReport?.report_period,
-                    series: currentReport?.series_index,
+                    series: getSeriesNames(),
                     current_page: currentPage
                 }
             })
@@ -593,3 +735,116 @@ modalStyles.textContent = `
     }
 `;
 document.head.appendChild(modalStyles);
+
+// Panel toggle functions
+function toggleSidebar() {
+    const container = document.getElementById('app-container');
+    container.classList.toggle('sidebar-collapsed');
+}
+
+function toggleAIPanel() {
+    const container = document.getElementById('app-container');
+    container.classList.toggle('ai-collapsed');
+}
+
+// Document modal functions
+function openDocumentModal(seriesName, pageNumber) {
+    const modal = document.getElementById('document-modal');
+
+    // Get series data from series_index
+    const seriesData = currentReport?.series_index?.[seriesName];
+    const pageData = currentReport?.document_flow?.find(p => p.page_number === pageNumber);
+
+    // Set header info
+    document.getElementById('modal-series-name').textContent = seriesName || 'Unknown Series';
+    document.getElementById('modal-sector').textContent = seriesData?.sector || pageData?.sector || 'Unknown';
+
+    // Set summary
+    const summarySection = document.getElementById('modal-summary-section');
+    const summaryEl = document.getElementById('modal-summary');
+    if (seriesData?.summary) {
+        summaryEl.textContent = seriesData.summary;
+        summarySection.style.display = 'block';
+    } else {
+        summarySection.style.display = 'none';
+    }
+
+    // Set interpretation from chart blocks
+    const interpSection = document.getElementById('modal-interpretation-section');
+    const interpEl = document.getElementById('modal-interpretation');
+    let interpretation = '';
+    if (pageData?.blocks) {
+        for (const block of pageData.blocks) {
+            if (block.interpretation?.description) {
+                interpretation = block.interpretation.description;
+                if (block.interpretation.business_implications) {
+                    interpretation += '\n\n**Business Implications:** ' + block.interpretation.business_implications;
+                }
+                break;
+            }
+        }
+    }
+    if (interpretation) {
+        interpEl.innerHTML = interpretation.replace(/\n\n/g, '<br><br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        interpSection.style.display = 'block';
+    } else {
+        interpSection.style.display = 'none';
+    }
+
+    // Set insights
+    const insightsSection = document.getElementById('modal-insights-section');
+    const insightsEl = document.getElementById('modal-insights');
+    const insights = seriesData?.insights || [];
+    if (insights.length > 0) {
+        insightsEl.innerHTML = insights.map(i => `<li>${i}</li>`).join('');
+        insightsSection.style.display = 'block';
+    } else {
+        insightsSection.style.display = 'none';
+    }
+
+    // Set extracted text
+    const textSection = document.getElementById('modal-text-section');
+    const textEl = document.getElementById('modal-text');
+    let extractedText = '';
+    if (pageData?.blocks) {
+        extractedText = pageData.blocks
+            .filter(b => b.block_type === 'text' && b.content)
+            .map(b => b.content)
+            .join('\n\n');
+    }
+    if (extractedText) {
+        textEl.textContent = extractedText;
+        textSection.style.display = 'block';
+    } else {
+        textSection.style.display = 'none';
+    }
+
+    // Set page reference
+    document.getElementById('modal-page-ref').textContent = `Page ${pageNumber}`;
+
+    // Set goto button action
+    const gotoBtn = document.getElementById('modal-goto-page');
+    gotoBtn.onclick = () => {
+        goToPage(pageNumber);
+        closeDocumentModal();
+    };
+
+    // Show modal
+    modal.classList.add('active');
+
+    // Handle escape key
+    document.addEventListener('keydown', handleModalEscape);
+}
+
+function closeDocumentModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById('document-modal');
+    modal.classList.remove('active');
+    document.removeEventListener('keydown', handleModalEscape);
+}
+
+function handleModalEscape(event) {
+    if (event.key === 'Escape') {
+        closeDocumentModal();
+    }
+}

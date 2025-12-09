@@ -1,0 +1,32 @@
+services:
+  itr-viewer:
+    build: .
+    container_name: itr-report-viewer
+    ports:
+      - "8081:8081"
+    environment:
+      - ITR_VIEWER_PORT=8081
+      - ITR_VIEWER_HOST=0.0.0.0
+      - ITR_MONGODB_URI=${ITR_MONGODB_URI:-mongodb+srv://licensing:-2wA.Yqb_HQxe6Q@analytics.meugir.mongodb.net/}
+      - ITR_DATABASE_NAME=${ITR_DATABASE_NAME:-ITRReports}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-01-01-preview}
+    volumes:
+      - ./Files:/app/Files
+      - ./output:/app/output
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Optional: MongoDB service (uncomment if you need a local MongoDB)
+  # mongodb:
+  #   image: mongo:7
+  #   container_name: itr-mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+
+# volumes:
+#   mongodb_data:

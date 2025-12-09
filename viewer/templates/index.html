@@ -4,11 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ITR Report Viewer - AI-Powered Economic Analysis</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/styles.css?v=4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="app-container">
+        <!-- Floating Toggle Buttons (shown when panels are collapsed) -->
+        <button class="floating-toggle sidebar-float" onclick="toggleSidebar()" title="Show Reports">
+            <i class="fas fa-list"></i>
+        </button>
+        <button class="floating-toggle ai-float" onclick="toggleAIPanel()" title="Show Ask AI">
+            <i class="fas fa-robot"></i>
+        </button>
+
         <!-- Header -->
         <header class="header">
             <div class="header-title">
@@ -20,9 +28,17 @@
                 </span>
             </div>
             <div class="header-actions">
+                <button class="btn btn-toggle" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Reports Panel">
+                    <i class="fas fa-chevron-left"></i>
+                    <span>Reports</span>
+                </button>
                 <button class="btn btn-secondary" onclick="uploadPDF()">
                     <i class="fas fa-upload"></i>
                     Upload PDF
+                </button>
+                <button class="btn btn-toggle" id="ai-toggle-btn" onclick="toggleAIPanel()" title="Toggle AI Panel">
+                    <span>Ask AI</span>
+                    <i class="fas fa-chevron-right"></i>
                 </button>
                 <button class="btn btn-primary" onclick="refreshReports()">
                     <i class="fas fa-sync-alt"></i>
@@ -33,6 +49,9 @@
 
         <!-- Sidebar - Report List -->
         <aside class="sidebar">
+            <button class="panel-toggle sidebar-toggle" onclick="toggleSidebar()" title="Hide Reports">
+                <i class="fas fa-chevron-left"></i>
+            </button>
             <div class="sidebar-header">
                 <h2>Reports</h2>
                 <span id="report-count" class="report-card-badge">0</span>
@@ -72,7 +91,10 @@
             <!-- Extracted Data Panel -->
             <div class="data-panel">
                 <div class="data-tabs">
-                    <button class="data-tab active" data-tab="overview" onclick="switchTab('overview')">
+                    <button class="data-tab active" data-tab="pagedata" onclick="switchTab('pagedata')">
+                        <i class="fas fa-sync-alt"></i> Page Data
+                    </button>
+                    <button class="data-tab" data-tab="overview" onclick="switchTab('overview')">
                         <i class="fas fa-th-large"></i> Overview
                     </button>
                     <button class="data-tab" data-tab="series" onclick="switchTab('series')">
@@ -82,12 +104,28 @@
                         <i class="fas fa-eye"></i> LLM Analysis
                     </button>
                     <button class="data-tab" data-tab="raw" onclick="switchTab('raw')">
-                        <i class="fas fa-code"></i> Raw Data
+                        <i class="fas fa-code"></i> Raw
                     </button>
                 </div>
 
+                <!-- Page Data Tab (synced with PDF) -->
+                <div class="tab-content active" id="tab-pagedata">
+                    <div class="page-data-header-bar">
+                        <span class="sync-indicator">
+                            <i class="fas fa-link"></i>
+                            Synced with PDF
+                        </span>
+                        <span id="current-page-indicator">Page 1</span>
+                    </div>
+                    <div id="page-data-content">
+                        <div class="loading">
+                            <p>Select a report to view page data</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Overview Tab -->
-                <div class="tab-content active" id="tab-overview">
+                <div class="tab-content" id="tab-overview">
                     <div id="overview-content">
                         <div class="loading">
                             <p>Select a report to view details</p>
@@ -124,6 +162,9 @@ Select a report to view raw JSON data
 
         <!-- AI Chat Panel -->
         <aside class="ai-panel">
+            <button class="panel-toggle ai-toggle" onclick="toggleAIPanel()" title="Hide Ask AI">
+                <i class="fas fa-chevron-right"></i>
+            </button>
             <div class="ai-header">
                 <h3>
                     <i class="fas fa-robot"></i>
@@ -185,6 +226,50 @@ Select a report to view raw JSON data
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <!-- Document Detail Modal -->
+    <div id="document-modal" class="document-modal" onclick="closeDocumentModal(event)">
+        <div class="document-modal-content" onclick="event.stopPropagation()">
+            <div class="document-modal-header">
+                <h3>
+                    <i class="fas fa-chart-line"></i>
+                    <span id="modal-series-name">Series Name</span>
+                    <span class="series-sector" id="modal-sector">Sector</span>
+                </h3>
+                <button class="document-modal-close" onclick="closeDocumentModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="document-modal-body">
+                <div class="document-modal-section" id="modal-summary-section">
+                    <h4><i class="fas fa-file-alt"></i> Summary</h4>
+                    <div class="summary-text" id="modal-summary">Loading...</div>
+                </div>
+                <div class="document-modal-section" id="modal-interpretation-section">
+                    <h4><i class="fas fa-brain"></i> LLM Interpretation</h4>
+                    <div class="content-text" id="modal-interpretation">Loading...</div>
+                </div>
+                <div class="document-modal-section" id="modal-insights-section">
+                    <h4><i class="fas fa-lightbulb"></i> Key Insights</h4>
+                    <ul class="insights-list" id="modal-insights"></ul>
+                </div>
+                <div class="document-modal-section" id="modal-text-section">
+                    <h4><i class="fas fa-paragraph"></i> Extracted Text</h4>
+                    <div class="content-text" id="modal-text">Loading...</div>
+                </div>
+            </div>
+            <div class="document-modal-footer">
+                <div class="page-ref">
+                    <i class="fas fa-file-pdf"></i>
+                    <span id="modal-page-ref">Page 1</span>
+                </div>
+                <button class="btn btn-primary" id="modal-goto-page" onclick="closeDocumentModal()">
+                    <i class="fas fa-external-link-alt"></i>
+                    View in PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>
