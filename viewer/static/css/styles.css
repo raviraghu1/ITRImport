@@ -2770,6 +2770,17 @@ body {
   margin-top: auto;
 }
 
+/* Analyze with AI button - black text on blue */
+.page-data-actions .btn-primary {
+  background: var(--color-primary);
+  color: #000000 !important;
+  font-weight: var(--font-weight-bold);
+}
+
+.page-data-actions .btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
 /* ============================================================================
    Save Analysis Modal Styles
    ============================================================================ */
@@ -3569,11 +3580,11 @@ body {
 .business-insights-btn {
   background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
   border: none;
-  color: white;
+  color: #000000 !important;
   padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
