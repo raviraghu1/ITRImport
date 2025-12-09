@@ -353,7 +353,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("ITR_VIEWER_PORT", 8080))
+    port = int(os.getenv("ITR_VIEWER_PORT", 8081))
     host = os.getenv("ITR_VIEWER_HOST", "0.0.0.0")
 
     print(f"""

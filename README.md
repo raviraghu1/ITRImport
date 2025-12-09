@@ -78,7 +78,7 @@ The `viewer/` directory contains a web application for viewing and analyzing rep
 
 ```bash
 python viewer/server.py
-# Open http://localhost:8080
+# Open http://localhost:8081
 ```
 
 ### Viewer Features
