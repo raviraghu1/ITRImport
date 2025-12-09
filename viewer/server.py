@@ -1088,6 +1088,176 @@ async def get_page_analysis(report_id: str, page_number: int):
     raise HTTPException(status_code=404, detail=f"Page {page_number} not found")
 
 
+class BusinessInsightsRequest(BaseModel):
+    """Request model for generating business insights."""
+    page_number: int
+    include_saved_analyses: bool = True
+    business_context: str = ""  # Optional context about the user's business
+
+
+@app.post("/api/reports/{report_id}/business-insights")
+async def generate_business_insights(report_id: str, request: BusinessInsightsRequest):
+    """Generate actionable business modeling insights from page content and saved analyses."""
+    if not AZURE_API_KEY:
+        raise HTTPException(status_code=503, detail="AI service not configured")
+
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    coll = db["ITRextract_Flow"]
+    doc = coll.find_one({"report_id": report_id})
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Find the page
+    document_flow = doc.get("document_flow", [])
+    page_data = None
+    for page in document_flow:
+        if page.get("page_number") == request.page_number:
+            page_data = page
+            break
+
+    if not page_data:
+        raise HTTPException(status_code=404, detail=f"Page {request.page_number} not found")
+
+    # Gather content for analysis
+    content_parts = []
+
+    # Add page extracted text
+    extracted_text = page_data.get("extracted_text", "")
+    if extracted_text:
+        content_parts.append(f"## Extracted Content from Page {request.page_number}\n{extracted_text}")
+
+    # Add page summary if available
+    summary = page_data.get("summary", "")
+    if summary:
+        content_parts.append(f"## Page Summary\n{summary}")
+
+    # Add series name context
+    series_name = page_data.get("series_name", "")
+    if series_name:
+        content_parts.append(f"## Economic Series: {series_name}")
+
+    # Add chart interpretations from blocks
+    blocks = page_data.get("blocks", [])
+    chart_interpretations = []
+    for block in blocks:
+        if block.get("block_type") == "chart" and block.get("interpretation"):
+            interp = block.get("interpretation", {})
+            chart_info = f"- Trend: {interp.get('trend_direction', 'N/A')}"
+            chart_info += f", Phase: {interp.get('current_phase', 'N/A')}"
+            if interp.get('business_implications'):
+                chart_info += f"\n  Implications: {interp.get('business_implications')}"
+            chart_interpretations.append(chart_info)
+
+    if chart_interpretations:
+        content_parts.append(f"## Chart Analysis\n" + "\n".join(chart_interpretations))
+
+    # Include saved analyses if requested
+    if request.include_saved_analyses:
+        custom_analyses = page_data.get("custom_analysis", [])
+        if custom_analyses:
+            if not isinstance(custom_analyses, list):
+                custom_analyses = [custom_analyses]
+            for i, analysis in enumerate(custom_analyses, 1):
+                content_parts.append(f"## Saved Analysis {i} ({analysis.get('analysis_type', 'general')})\n{analysis.get('content', '')}")
+
+    combined_content = "\n\n".join(content_parts)
+
+    if not combined_content.strip():
+        raise HTTPException(status_code=400, detail="No content available for this page")
+
+    # Build the business insights prompt
+    system_prompt = f"""You are a strategic business advisor who translates economic analysis into actionable business modeling insights.
+
+Your role is to extract specific, quantifiable inputs that can be used in:
+- Financial planning and budgeting models
+- Demand forecasting models
+- Capacity planning
+- Inventory management
+- Pricing strategy models
+- Risk assessment frameworks
+- Investment decision models
+
+Report: {doc.get('pdf_filename', 'Unknown')}
+Report Period: {doc.get('report_period', 'Unknown')}
+Page: {request.page_number}
+{f"Business Context: {request.business_context}" if request.business_context else ""}
+
+Provide your response in the following structured format:
+
+## 📊 Key Metrics for Business Models
+List specific numbers, percentages, growth rates, and timeframes that can be input into models.
+
+## 📈 Demand & Revenue Implications
+How should this data influence revenue forecasts and demand planning?
+
+## 💰 Cost & Margin Considerations
+What cost factors or margin pressures should be modeled?
+
+## ⏱️ Timing & Phasing
+Key dates, phases, or timing considerations for planning cycles.
+
+## ⚠️ Risk Factors to Model
+Specific risks with suggested probability ranges or impact levels.
+
+## 🎯 Recommended Model Adjustments
+Concrete suggestions for adjusting existing business models.
+
+## 📋 Action Items
+Prioritized list of next steps for the planning team.
+
+Be specific, quantitative where possible, and actionable. Avoid generic advice."""
+
+    user_prompt = f"Based on the following economic analysis content, extract actionable business modeling insights:\n\n{combined_content[:12000]}"
+
+    try:
+        api_url = f"{AZURE_ENDPOINT}?api-version={AZURE_API_VERSION}"
+        print(f"[Business Insights] Calling API for page {request.page_number}")
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "api-key": AZURE_API_KEY
+                },
+                json={
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": 3000,
+                    "temperature": 0.4
+                }
+            )
+
+            if response.status_code != 200:
+                print(f"[Business Insights] Error: {response.text[:500]}")
+                raise HTTPException(status_code=500, detail=f"AI service error: {response.text}")
+
+            result = response.json()
+            insights = result["choices"][0]["message"]["content"]
+
+            print(f"[Business Insights] Success! Response length: {len(insights)} chars")
+
+            return {
+                "insights": insights,
+                "page_number": request.page_number,
+                "series_name": series_name,
+                "report_id": report_id,
+                "included_saved_analyses": request.include_saved_analyses,
+                "timestamp": datetime.now().isoformat()
+            }
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="AI service timeout")
+    except Exception as e:
+        print(f"[Business Insights] Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate insights: {str(e)}")
+
+
 @app.post("/api/reports/{report_id}/generate-overall-summary")
 async def generate_overall_summary(report_id: str, request: GenerateSummaryRequest = None):
     """Generate or regenerate overall LLM summary for the report."""

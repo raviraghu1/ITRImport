@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ITR Report Viewer - AI-Powered Economic Analysis</title>
-    <link rel="stylesheet" href="/static/css/styles.css?v=22">
+    <link rel="stylesheet" href="/static/css/styles.css?v=23">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -529,6 +529,62 @@ Select a report to view raw JSON data
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=18"></script>
+    <!-- Business Insights Modal -->
+    <div id="business-insights-modal" class="business-insights-modal" onclick="closeBusinessInsightsModal(event)">
+        <div class="business-insights-modal-content" onclick="event.stopPropagation()">
+            <div class="business-insights-modal-header">
+                <h3>
+                    <i class="fas fa-briefcase"></i>
+                    Business Modeling Insights
+                </h3>
+                <button class="document-modal-close" onclick="closeBusinessInsightsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="business-insights-modal-meta" id="business-insights-meta">
+                <div class="insights-page-info">
+                    <i class="fas fa-file-alt"></i>
+                    <span id="insights-page-number">Page 4</span>
+                </div>
+                <div class="insights-series-info" id="insights-series-info" style="display: none;">
+                    <i class="fas fa-chart-line"></i>
+                    <span id="insights-series-name"></span>
+                </div>
+            </div>
+            <div class="business-insights-context-section" id="business-context-section">
+                <label for="business-context-input">
+                    <i class="fas fa-building"></i> Your Business Context (Optional)
+                </label>
+                <textarea
+                    id="business-context-input"
+                    placeholder="E.g., We are a construction materials supplier focused on residential housing in the Midwest..."
+                    rows="2"
+                ></textarea>
+            </div>
+            <div class="business-insights-options">
+                <label class="insights-option">
+                    <input type="checkbox" id="include-saved-analyses" checked>
+                    <span>Include saved AI analyses in insights generation</span>
+                </label>
+            </div>
+            <div class="business-insights-modal-body" id="business-insights-body">
+                <div class="insights-placeholder">
+                    <i class="fas fa-lightbulb"></i>
+                    <p>Click "Generate Insights" to extract actionable business modeling inputs from this page's content and analyses.</p>
+                </div>
+            </div>
+            <div class="business-insights-modal-footer">
+                <button class="btn btn-secondary" onclick="copyBusinessInsights()" id="copy-insights-btn" style="display: none;">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button class="btn btn-secondary" onclick="closeBusinessInsightsModal()">Close</button>
+                <button class="btn btn-primary" id="generate-insights-btn" onclick="generateBusinessInsights()">
+                    <i class="fas fa-magic"></i> Generate Insights
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=23"></script>
 </body>
 </html>

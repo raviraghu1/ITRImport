@@ -271,6 +271,10 @@ function updateCurrentPageData() {
                     <i class="fas fa-brain"></i>
                     Analyze with AI
                 </button>
+                <button class="business-insights-btn" onclick="openBusinessInsightsModal()">
+                    <i class="fas fa-briefcase"></i>
+                    Business Insights
+                </button>
                 ${seriesName ? `
                     <button class="btn btn-secondary btn-sm" onclick="openDocumentModal('${(seriesName || '').replace(/'/g, "\\'")}', ${currentPage})">
                         <i class="fas fa-expand"></i>
@@ -2310,4 +2314,173 @@ function resetSaveModal() {
     const btn = document.getElementById('confirm-save-btn');
     btn.innerHTML = '<i class="fas fa-check"></i> Save Analysis';
     btn.disabled = false;
+}
+
+// ============================================================================
+// Business Insights Functions
+// ============================================================================
+
+let currentBusinessInsights = null;
+
+// Open business insights modal
+function openBusinessInsightsModal() {
+    if (!currentReport) {
+        alert('Please select a report first');
+        return;
+    }
+
+    // Update page info
+    document.getElementById('insights-page-number').textContent = `Page ${currentPage}`;
+
+    // Get series name if available
+    const pageData = currentReport.document_flow?.find(p => p.page_number === currentPage);
+    const seriesName = pageData?.series_name;
+    const seriesInfo = document.getElementById('insights-series-info');
+
+    if (seriesName) {
+        document.getElementById('insights-series-name').textContent = seriesName;
+        seriesInfo.style.display = 'flex';
+    } else {
+        seriesInfo.style.display = 'none';
+    }
+
+    // Reset modal state
+    document.getElementById('business-context-input').value = '';
+    document.getElementById('include-saved-analyses').checked = true;
+    document.getElementById('business-insights-body').innerHTML = `
+        <div class="insights-placeholder">
+            <i class="fas fa-lightbulb"></i>
+            <p>Click "Generate Insights" to extract actionable business modeling inputs from this page's content and analyses.</p>
+        </div>
+    `;
+    document.getElementById('copy-insights-btn').style.display = 'none';
+    document.getElementById('generate-insights-btn').disabled = false;
+    document.getElementById('generate-insights-btn').innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
+    currentBusinessInsights = null;
+
+    // Show modal
+    document.getElementById('business-insights-modal').classList.add('active');
+}
+
+// Close business insights modal
+function closeBusinessInsightsModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('business-insights-modal').classList.remove('active');
+}
+
+// Generate business insights
+async function generateBusinessInsights() {
+    if (!currentReport?.report_id) {
+        alert('No report selected');
+        return;
+    }
+
+    const businessContext = document.getElementById('business-context-input').value.trim();
+    const includeSavedAnalyses = document.getElementById('include-saved-analyses').checked;
+
+    const btn = document.getElementById('generate-insights-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+    // Show loading state
+    document.getElementById('business-insights-body').innerHTML = `
+        <div class="insights-loading">
+            <div class="spinner"></div>
+            <p>Generating business modeling insights...</p>
+            <p style="font-size: 0.85em; opacity: 0.7;">This may take up to a minute</p>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/reports/${currentReport.report_id}/business-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                page_number: currentPage,
+                include_saved_analyses: includeSavedAnalyses,
+                business_context: businessContext
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to generate insights');
+        }
+
+        const result = await response.json();
+        currentBusinessInsights = result.insights;
+
+        // Display insights
+        document.getElementById('business-insights-body').innerHTML = `
+            <div class="insights-content">
+                ${formatInsightsMarkdown(result.insights)}
+            </div>
+        `;
+
+        // Show copy button
+        document.getElementById('copy-insights-btn').style.display = 'inline-flex';
+
+    } catch (error) {
+        console.error('Business insights error:', error);
+        document.getElementById('business-insights-body').innerHTML = `
+            <div class="insights-placeholder" style="color: var(--color-danger);">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>Failed to generate insights: ${error.message}</p>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
+    }
+}
+
+// Format insights markdown to HTML
+function formatInsightsMarkdown(text) {
+    if (!text) return '';
+
+    return text
+        // Headers with emojis
+        .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+        // Bold
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Bullet lists
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        // Numbered lists
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        // Paragraphs
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>')
+        // Wrap
+        .replace(/^/, '<p>')
+        .replace(/$/, '</p>')
+        // Clean up list items
+        .replace(/<\/p><li>/g, '<ul><li>')
+        .replace(/<\/li><p>/g, '</li></ul><p>')
+        .replace(/<\/li><br><li>/g, '</li><li>');
+}
+
+// Copy business insights to clipboard
+function copyBusinessInsights() {
+    if (!currentBusinessInsights) return;
+
+    navigator.clipboard.writeText(currentBusinessInsights).then(() => {
+        const btn = document.getElementById('copy-insights-btn');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        btn.style.background = '#22c55e';
+        btn.style.borderColor = '#22c55e';
+        btn.style.color = 'white';
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }, 2000);
+    }).catch(err => {
+        console.error('Copy failed:', err);
+        alert('Failed to copy to clipboard');
+    });
 }
