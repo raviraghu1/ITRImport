@@ -1090,14 +1090,15 @@ async def get_page_analysis(report_id: str, page_number: int):
 
 class BusinessInsightsRequest(BaseModel):
     """Request model for generating business insights."""
-    page_number: int
-    include_saved_analyses: bool = True
+    page_numbers: list[int]  # Support multiple pages
+    selected_analysis_ids: list[str] = []  # IDs of selected saved analyses to include
     business_context: str = ""  # Optional context about the user's business
+    target_page: int = 0  # Page to save insights to (0 = first selected page)
 
 
 @app.post("/api/reports/{report_id}/business-insights")
 async def generate_business_insights(report_id: str, request: BusinessInsightsRequest):
-    """Generate actionable business modeling insights from page content and saved analyses."""
+    """Generate actionable business modeling insights from multiple pages and selected analyses."""
     if not AZURE_API_KEY:
         raise HTTPException(status_code=503, detail="AI service not configured")
 
@@ -1110,65 +1111,83 @@ async def generate_business_insights(report_id: str, request: BusinessInsightsRe
     if not doc:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Find the page
+    if not request.page_numbers:
+        raise HTTPException(status_code=400, detail="At least one page must be selected")
+
     document_flow = doc.get("document_flow", [])
-    page_data = None
-    for page in document_flow:
-        if page.get("page_number") == request.page_number:
-            page_data = page
-            break
 
-    if not page_data:
-        raise HTTPException(status_code=404, detail=f"Page {request.page_number} not found")
-
-    # Gather content for analysis
+    # Gather content from all selected pages
     content_parts = []
+    series_names = []
 
-    # Add page extracted text
-    extracted_text = page_data.get("extracted_text", "")
-    if extracted_text:
-        content_parts.append(f"## Extracted Content from Page {request.page_number}\n{extracted_text}")
+    for page_num in request.page_numbers:
+        page_data = None
+        for page in document_flow:
+            if page.get("page_number") == page_num:
+                page_data = page
+                break
 
-    # Add page summary if available
-    summary = page_data.get("summary", "")
-    if summary:
-        content_parts.append(f"## Page Summary\n{summary}")
+        if not page_data:
+            continue
 
-    # Add series name context
-    series_name = page_data.get("series_name", "")
-    if series_name:
-        content_parts.append(f"## Economic Series: {series_name}")
+        # Add page header
+        content_parts.append(f"\n{'='*50}\n## PAGE {page_num}\n{'='*50}")
 
-    # Add chart interpretations from blocks
-    blocks = page_data.get("blocks", [])
-    chart_interpretations = []
-    for block in blocks:
-        if block.get("block_type") == "chart" and block.get("interpretation"):
-            interp = block.get("interpretation", {})
-            chart_info = f"- Trend: {interp.get('trend_direction', 'N/A')}"
-            chart_info += f", Phase: {interp.get('current_phase', 'N/A')}"
-            if interp.get('business_implications'):
-                chart_info += f"\n  Implications: {interp.get('business_implications')}"
-            chart_interpretations.append(chart_info)
+        # Add page extracted text
+        extracted_text = page_data.get("extracted_text", "")
+        if extracted_text:
+            content_parts.append(f"### Extracted Content\n{extracted_text}")
 
-    if chart_interpretations:
-        content_parts.append(f"## Chart Analysis\n" + "\n".join(chart_interpretations))
+        # Add page summary if available
+        summary = page_data.get("summary", "")
+        if summary:
+            content_parts.append(f"### Page Summary\n{summary}")
 
-    # Include saved analyses if requested
-    if request.include_saved_analyses:
+        # Add series name context
+        series_name = page_data.get("series_name", "")
+        if series_name:
+            series_names.append(series_name)
+            content_parts.append(f"### Economic Series: {series_name}")
+
+        # Add chart interpretations from blocks
+        blocks = page_data.get("blocks", [])
+        chart_interpretations = []
+        for block in blocks:
+            if block.get("block_type") == "chart" and block.get("interpretation"):
+                interp = block.get("interpretation", {})
+                chart_info = f"- Trend: {interp.get('trend_direction', 'N/A')}"
+                chart_info += f", Phase: {interp.get('current_phase', 'N/A')}"
+                if interp.get('business_implications'):
+                    chart_info += f"\n  Implications: {interp.get('business_implications')}"
+                chart_interpretations.append(chart_info)
+
+        if chart_interpretations:
+            content_parts.append(f"### Chart Analysis\n" + "\n".join(chart_interpretations))
+
+        # Include selected saved analyses
         custom_analyses = page_data.get("custom_analysis", [])
         if custom_analyses:
             if not isinstance(custom_analyses, list):
                 custom_analyses = [custom_analyses]
-            for i, analysis in enumerate(custom_analyses, 1):
-                content_parts.append(f"## Saved Analysis {i} ({analysis.get('analysis_type', 'general')})\n{analysis.get('content', '')}")
+            for i, analysis in enumerate(custom_analyses):
+                # Create analysis ID for matching
+                analysis_id = f"p{page_num}_a{i}"
+                if not request.selected_analysis_ids or analysis_id in request.selected_analysis_ids:
+                    analysis_type = analysis.get('analysis_type', 'general')
+                    content_parts.append(f"### Saved AI Analysis ({analysis_type})\n{analysis.get('content', '')}")
 
     combined_content = "\n\n".join(content_parts)
 
     if not combined_content.strip():
-        raise HTTPException(status_code=400, detail="No content available for this page")
+        raise HTTPException(status_code=400, detail="No content available for the selected pages")
+
+    # Determine target page for saving
+    target_page = request.target_page if request.target_page > 0 else request.page_numbers[0]
 
     # Build the business insights prompt
+    pages_str = ", ".join(str(p) for p in request.page_numbers)
+    series_str = ", ".join(set(series_names)) if series_names else "Multiple series"
+
     system_prompt = f"""You are a strategic business advisor who translates economic analysis into actionable business modeling insights.
 
 Your role is to extract specific, quantifiable inputs that can be used in:
@@ -1182,7 +1201,8 @@ Your role is to extract specific, quantifiable inputs that can be used in:
 
 Report: {doc.get('pdf_filename', 'Unknown')}
 Report Period: {doc.get('report_period', 'Unknown')}
-Page: {request.page_number}
+Pages Analyzed: {pages_str}
+Economic Series: {series_str}
 {f"Business Context: {request.business_context}" if request.business_context else ""}
 
 Provide your response in the following structured format:
@@ -1210,11 +1230,11 @@ Prioritized list of next steps for the planning team.
 
 Be specific, quantitative where possible, and actionable. Avoid generic advice."""
 
-    user_prompt = f"Based on the following economic analysis content, extract actionable business modeling insights:\n\n{combined_content[:12000]}"
+    user_prompt = f"Based on the following economic analysis content from {len(request.page_numbers)} page(s), extract actionable business modeling insights:\n\n{combined_content[:15000]}"
 
     try:
         api_url = f"{AZURE_ENDPOINT}?api-version={AZURE_API_VERSION}"
-        print(f"[Business Insights] Calling API for page {request.page_number}")
+        print(f"[Business Insights] Calling API for pages {pages_str}")
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -1228,7 +1248,7 @@ Be specific, quantitative where possible, and actionable. Avoid generic advice."
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    "max_tokens": 3000,
+                    "max_tokens": 3500,
                     "temperature": 0.4
                 }
             )
@@ -1244,10 +1264,11 @@ Be specific, quantitative where possible, and actionable. Avoid generic advice."
 
             return {
                 "insights": insights,
-                "page_number": request.page_number,
-                "series_name": series_name,
+                "page_numbers": request.page_numbers,
+                "target_page": target_page,
+                "series_names": list(set(series_names)),
                 "report_id": report_id,
-                "included_saved_analyses": request.include_saved_analyses,
+                "selected_analysis_ids": request.selected_analysis_ids,
                 "timestamp": datetime.now().isoformat()
             }
 
@@ -1256,6 +1277,103 @@ Be specific, quantitative where possible, and actionable. Avoid generic advice."
     except Exception as e:
         print(f"[Business Insights] Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate insights: {str(e)}")
+
+
+class SaveBusinessInsightsRequest(BaseModel):
+    """Request model for saving business insights."""
+    target_page: int
+    insights: str
+    page_numbers: list[int]  # Pages used to generate insights
+    selected_analysis_ids: list[str] = []
+    business_context: str = ""
+    mode: str = "replace"  # "replace" or "append"
+
+
+@app.post("/api/reports/{report_id}/save-business-insights")
+async def save_business_insights(report_id: str, request: SaveBusinessInsightsRequest):
+    """Save generated business insights to a specific page."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    coll = db["ITRextract_Flow"]
+    doc = coll.find_one({"report_id": report_id})
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Find the target page in document_flow
+    document_flow = doc.get("document_flow", [])
+    page_index = None
+    existing_insights = None
+
+    for i, page in enumerate(document_flow):
+        if page.get("page_number") == request.target_page:
+            page_index = i
+            existing_insights = page.get("business_insights", None)
+            break
+
+    if page_index is None:
+        raise HTTPException(status_code=404, detail=f"Page {request.target_page} not found")
+
+    # Build the insights entry
+    new_insights_entry = {
+        "content": request.insights,
+        "source_pages": request.page_numbers,
+        "selected_analysis_ids": request.selected_analysis_ids,
+        "business_context": request.business_context,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    # Handle append vs replace
+    if request.mode == "append" and existing_insights:
+        # Append to existing insights list
+        if isinstance(existing_insights, list):
+            insights_list = existing_insights + [new_insights_entry]
+        else:
+            # Convert old single insights to list
+            insights_list = [existing_insights, new_insights_entry]
+    else:
+        # Replace - store as list with single entry
+        insights_list = [new_insights_entry]
+
+    # Update the document
+    update_path = f"document_flow.{page_index}.business_insights"
+    coll.update_one(
+        {"report_id": report_id},
+        {"$set": {update_path: insights_list}}
+    )
+
+    return {
+        "success": True,
+        "message": f"Business insights {'appended to' if request.mode == 'append' else 'saved to'} page {request.target_page}",
+        "target_page": request.target_page,
+        "total_insights": len(insights_list)
+    }
+
+
+@app.get("/api/reports/{report_id}/page/{page_number}/business-insights")
+async def get_page_business_insights(report_id: str, page_number: int):
+    """Get saved business insights for a specific page."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    coll = db["ITRextract_Flow"]
+    doc = coll.find_one({"report_id": report_id})
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Find the page
+    document_flow = doc.get("document_flow", [])
+    for page in document_flow:
+        if page.get("page_number") == page_number:
+            return {
+                "page_number": page_number,
+                "business_insights": page.get("business_insights", None),
+                "has_insights": page.get("business_insights") is not None
+            }
+
+    raise HTTPException(status_code=404, detail=f"Page {page_number} not found")
 
 
 @app.post("/api/reports/{report_id}/generate-overall-summary")

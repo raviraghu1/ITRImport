@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ITR Report Viewer - AI-Powered Economic Analysis</title>
-    <link rel="stylesheet" href="/static/css/styles.css?v=26">
+    <link rel="stylesheet" href="/static/css/styles.css?v=27">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -541,50 +541,123 @@ Select a report to view raw JSON data
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="business-insights-modal-meta" id="business-insights-meta">
-                <div class="insights-page-info">
-                    <i class="fas fa-file-alt"></i>
-                    <span id="insights-page-number">Page 4</span>
+
+            <!-- Page Selection Section -->
+            <div class="business-insights-section">
+                <h4><i class="fas fa-file-alt"></i> Select Pages for Context</h4>
+                <div class="insights-page-selection-controls">
+                    <button class="btn btn-sm btn-secondary" onclick="selectInsightsCurrentPage()">Current Page</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectInsightsAllPages()">All Pages</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectInsightsPageRange()">Range...</button>
+                    <button class="btn btn-sm btn-secondary" onclick="clearInsightsPageSelection()">Clear</button>
                 </div>
-                <div class="insights-series-info" id="insights-series-info" style="display: none;">
-                    <i class="fas fa-chart-line"></i>
-                    <span id="insights-series-name"></span>
+                <div class="insights-selected-pages-display" id="insights-selected-pages-display">
+                    <span class="placeholder">No pages selected</span>
+                </div>
+                <div class="insights-page-grid" id="insights-page-grid">
+                    <!-- Page checkboxes will be populated dynamically -->
                 </div>
             </div>
-            <div class="business-insights-context-section" id="business-context-section">
-                <label for="business-context-input">
-                    <i class="fas fa-building"></i> Your Business Context (Optional)
-                </label>
+
+            <!-- Saved AI Analysis Topics Section -->
+            <div class="business-insights-section">
+                <h4><i class="fas fa-brain"></i> Include Saved AI Analysis Topics</h4>
+                <p class="section-hint">Select saved analyses from your chosen pages to include in context</p>
+                <div class="insights-analysis-topics" id="insights-analysis-topics">
+                    <div class="no-topics-placeholder">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Select pages above to see available saved analyses</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Business Context Section -->
+            <div class="business-insights-section">
+                <h4><i class="fas fa-building"></i> Your Business Context (Optional)</h4>
                 <textarea
                     id="business-context-input"
                     placeholder="E.g., We are a construction materials supplier focused on residential housing in the Midwest..."
                     rows="2"
                 ></textarea>
             </div>
-            <div class="business-insights-options">
-                <label class="insights-option">
-                    <input type="checkbox" id="include-saved-analyses" checked>
-                    <span>Include saved AI analyses in insights generation</span>
-                </label>
-            </div>
+
+            <!-- Results Section -->
             <div class="business-insights-modal-body" id="business-insights-body">
                 <div class="insights-placeholder">
                     <i class="fas fa-lightbulb"></i>
-                    <p>Click "Generate Insights" to extract actionable business modeling inputs from this page's content and analyses.</p>
+                    <p>Click "Generate Insights" to extract actionable business modeling inputs from selected pages and analyses.</p>
                 </div>
             </div>
-            <div class="business-insights-modal-footer">
-                <button class="btn btn-secondary" onclick="copyBusinessInsights()" id="copy-insights-btn" style="display: none;">
-                    <i class="fas fa-copy"></i> Copy
-                </button>
-                <button class="btn btn-secondary" onclick="closeBusinessInsightsModal()">Close</button>
-                <button class="btn btn-primary" id="generate-insights-btn" onclick="generateBusinessInsights()">
-                    <i class="fas fa-magic"></i> Generate Insights
-                </button>
+
+            <!-- Default Footer -->
+            <div class="business-insights-modal-footer" id="insights-default-footer">
+                <div class="insights-status" id="insights-status">
+                    <span id="insights-pages-selected-count">0 pages selected</span>
+                </div>
+                <div class="insights-footer-actions">
+                    <button class="btn btn-secondary" onclick="copyBusinessInsights()" id="copy-insights-btn" style="display: none;">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeBusinessInsightsModal()">Close</button>
+                    <button class="btn btn-primary" id="generate-insights-btn" onclick="generateBusinessInsights()" disabled>
+                        <i class="fas fa-magic"></i> Generate Insights
+                    </button>
+                </div>
+            </div>
+
+            <!-- Save Footer (shown after generation) -->
+            <div class="business-insights-modal-footer insights-save-footer" id="insights-save-footer" style="display: none;">
+                <div class="existing-insights-warning" id="existing-insights-warning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>This page already has saved Business Insights</span>
+                </div>
+                <div class="insights-save-options" id="insights-save-options">
+                    <label class="save-mode-option">
+                        <input type="radio" name="insights-save-mode" value="replace" checked>
+                        <span class="option-content">
+                            <i class="fas fa-sync-alt"></i>
+                            <strong>Replace</strong>
+                        </span>
+                    </label>
+                    <label class="save-mode-option">
+                        <input type="radio" name="insights-save-mode" value="append">
+                        <span class="option-content">
+                            <i class="fas fa-plus-circle"></i>
+                            <strong>Append</strong>
+                        </span>
+                    </label>
+                </div>
+                <div class="insights-footer-actions">
+                    <button class="btn btn-secondary" onclick="copyBusinessInsights()">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                    <button class="btn btn-secondary" onclick="regenerateBusinessInsights()">
+                        <i class="fas fa-redo"></i> Regenerate
+                    </button>
+                    <button class="btn btn-primary" onclick="saveBusinessInsights()">
+                        <i class="fas fa-save"></i> Save to Page
+                    </button>
+                </div>
+            </div>
+
+            <!-- Success Footer (shown after save) -->
+            <div class="business-insights-modal-footer insights-success-footer" id="insights-success-footer" style="display: none;">
+                <div class="save-success-message">
+                    <i class="fas fa-check-circle"></i>
+                    <span id="insights-save-success-text">Business Insights saved successfully!</span>
+                </div>
+                <div class="insights-footer-actions">
+                    <button class="btn btn-secondary" onclick="continueBusinessInsights()">
+                        <i class="fas fa-redo"></i> Generate More
+                    </button>
+                    <button class="btn btn-primary" onclick="goToInsightsSavedPage()">
+                        <i class="fas fa-arrow-right"></i> Go to Page
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=23"></script>
+    <script src="/static/js/app.js?v=24"></script>
 </body>
 </html>

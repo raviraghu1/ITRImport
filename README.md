@@ -1,6 +1,6 @@
 # ITRImport
 
-**ITR Economics Data Import & Analysis System** | v3.1.0
+**ITR Economics Data Import & Analysis System** | v3.2.0
 
 Extract, analyze, and interactively explore economic data from ITR Economics Trends Report PDFs with AI-powered enhancement, GPT-4 Vision chart interpretation, and an intelligent report viewer.
 
@@ -55,12 +55,14 @@ PDF Reports → Intelligent Extraction → MongoDB Storage → Interactive Viewe
 - **Consolidated Documents**: Single document per PDF for downstream use
 - **Multi-Format Export**: JSON, CSV, and detailed text reports
 
-### Interactive Viewer (NEW in v3.1)
+### Interactive Viewer (v3.2)
 - **Side-by-Side View**: PDF displayed alongside extracted data
 - **Ask AI Chat**: Natural language queries about report content
 - **Analyze with AI**: Multi-page analysis with custom context
 - **Save Analyses**: Build institutional knowledge by saving insights to pages
 - **View Full Analysis**: Popup modals for saved analysis review
+- **Business Insights**: Generate actionable business modeling inputs from economic data
+- **Multi-Page Context**: Select multiple pages and saved analyses for comprehensive insights
 - **Orange Scrollbars**: Enhanced visibility throughout the interface
 
 ---
@@ -124,7 +126,27 @@ PDF Reports → Intelligent Extraction → MongoDB Storage → Interactive Viewe
 4. Data stored in MongoDB, accessible via API
 5. Viewer immediately reflects new reports
 
-### 6. Custom Research Queries
+### 6. Business Modeling Integration
+
+**Scenario**: Financial planning team needs economic inputs for budget models
+
+**Workflow**:
+1. Open report in viewer, click **"Business Insights"** button
+2. **Select Multiple Pages**: Choose pages covering relevant economic indicators
+3. **Include Saved Analyses**: Select previously saved AI analyses for additional context
+4. **Add Business Context**: "We are a construction materials supplier in the Midwest"
+5. **Generate Insights**: AI produces structured business modeling inputs:
+   - Key metrics for models
+   - Demand & revenue implications
+   - Cost & margin considerations
+   - Timing & phasing recommendations
+   - Risk factors to model
+   - Recommended model adjustments
+   - Prioritized action items
+6. **Save to Page**: Choose Replace or Append to build knowledge base
+7. Export insights for integration with Excel/financial models
+
+### 7. Custom Research Queries
 
 **Scenario**: Economist needs specific data point comparisons
 
@@ -229,6 +251,36 @@ The viewer provides an interactive interface for exploring and analyzing ITR rep
 - **Copy to Clipboard** for easy sharing
 - Orange scrollbars for easy navigation when multiple analyses exist
 
+### Business Insights Feature (NEW in v3.2)
+
+Transform economic analysis into actionable business modeling inputs.
+
+1. Click **"Business Insights"** button on any page
+2. **Select Pages for Context**:
+   - Current Page (default selected)
+   - All Pages - include entire report
+   - Range - specify custom page ranges (e.g., "1-10, 15, 20-25")
+   - Page grid shows brain icon for pages with saved AI analyses
+3. **Include Saved AI Analysis Topics**:
+   - View all saved analyses from selected pages
+   - Select specific analyses to include in context
+   - "Select All" / "Clear" for quick selection
+4. **Add Business Context** (optional):
+   - Describe your business focus
+   - Example: "Construction materials supplier in residential housing"
+5. **Generate Insights**: AI produces structured output:
+   - 📊 Key Metrics for Business Models
+   - 📈 Demand & Revenue Implications
+   - 💰 Cost & Margin Considerations
+   - ⏱️ Timing & Phasing
+   - ⚠️ Risk Factors to Model
+   - 🎯 Recommended Model Adjustments
+   - 📋 Action Items
+6. **Save Options**:
+   - **Replace** - Overwrite existing Business Insights
+   - **Append** - Add to existing insights
+   - Post-save: "Generate More" or "Go to Page"
+
 ### Ask AI Examples
 
 - "Compare the extracted series with the PDF"
@@ -311,6 +363,9 @@ python api.py
 | `POST` | `/api/reports/{id}/analyze-pages` | Run multi-page AI analysis |
 | `POST` | `/api/reports/{id}/save-page-analysis` | Save analysis to page |
 | `GET` | `/api/reports/{id}/page/{num}/analysis` | Get saved analyses for page |
+| `POST` | `/api/reports/{id}/business-insights` | Generate business modeling insights |
+| `POST` | `/api/reports/{id}/save-business-insights` | Save business insights to page |
+| `GET` | `/api/reports/{id}/page/{num}/business-insights` | Get saved business insights |
 
 ---
 
@@ -396,6 +451,15 @@ python api.py
           "pages_analyzed": [1, 2, 3],
           "analyst_context": "Focus on Q1 planning",
           "timestamp": "2024-12-09T16:08:00Z"
+        }
+      ],
+      "business_insights": [
+        {
+          "content": "## Key Metrics for Business Models\n...",
+          "source_pages": [1, 2, 3, 5],
+          "selected_analysis_ids": ["p1_a0", "p2_a0"],
+          "business_context": "Construction materials supplier",
+          "timestamp": "2024-12-09T18:30:00Z"
         }
       ],
       "blocks": [
@@ -503,6 +567,14 @@ ITRImport/
 ---
 
 ## Changelog
+
+### v3.2.0 (2024-12-09)
+- **Business Insights**: Generate actionable business modeling inputs from economic data
+- **Multi-Page Selection**: Select multiple pages for context in Business Insights
+- **Include Saved Analyses**: Choose specific saved AI analyses to include in insights generation
+- **Save Business Insights**: Store insights to pages with Replace/Append options
+- **Enhanced Page Grid**: Visual indicators for pages with saved analyses
+- **Structured Output**: Key metrics, demand implications, cost considerations, timing, risks, and action items
 
 ### v3.1.0 (2024-12-09)
 - **Analyze with AI**: Multi-page analysis with custom context

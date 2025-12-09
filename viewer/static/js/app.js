@@ -2321,6 +2321,10 @@ function resetSaveModal() {
 // ============================================================================
 
 let currentBusinessInsights = null;
+let insightsSelectedPages = new Set();
+let insightsSelectedAnalyses = new Set();
+let insightsTargetPage = 0;
+let insightsGenerationResult = null;
 
 // Open business insights modal
 function openBusinessInsightsModal() {
@@ -2329,37 +2333,287 @@ function openBusinessInsightsModal() {
         return;
     }
 
-    // Update page info
-    document.getElementById('insights-page-number').textContent = `Page ${currentPage}`;
-
-    // Get series name if available
-    const pageData = currentReport.document_flow?.find(p => p.page_number === currentPage);
-    const seriesName = pageData?.series_name;
-    const seriesInfo = document.getElementById('insights-series-info');
-
-    if (seriesName) {
-        document.getElementById('insights-series-name').textContent = seriesName;
-        seriesInfo.style.display = 'flex';
-    } else {
-        seriesInfo.style.display = 'none';
-    }
+    // Reset state
+    insightsSelectedPages = new Set([currentPage]);
+    insightsSelectedAnalyses = new Set();
+    insightsTargetPage = currentPage;
+    insightsGenerationResult = null;
+    currentBusinessInsights = null;
 
     // Reset modal state
     document.getElementById('business-context-input').value = '';
-    document.getElementById('include-saved-analyses').checked = true;
     document.getElementById('business-insights-body').innerHTML = `
         <div class="insights-placeholder">
             <i class="fas fa-lightbulb"></i>
-            <p>Click "Generate Insights" to extract actionable business modeling inputs from this page's content and analyses.</p>
+            <p>Click "Generate Insights" to extract actionable business modeling inputs from selected pages and analyses.</p>
         </div>
     `;
+
+    // Show default footer, hide others
+    document.getElementById('insights-default-footer').style.display = 'flex';
+    document.getElementById('insights-save-footer').style.display = 'none';
+    document.getElementById('insights-success-footer').style.display = 'none';
     document.getElementById('copy-insights-btn').style.display = 'none';
-    document.getElementById('generate-insights-btn').disabled = false;
-    document.getElementById('generate-insights-btn').innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
-    currentBusinessInsights = null;
+
+    // Populate page grid
+    populateInsightsPageGrid();
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
 
     // Show modal
     document.getElementById('business-insights-modal').classList.add('active');
+}
+
+// Populate the page grid for selection
+function populateInsightsPageGrid() {
+    const grid = document.getElementById('insights-page-grid');
+    const totalPages = currentReport?.total_pages || currentReport?.document_flow?.length || 1;
+
+    let html = '';
+    for (let i = 1; i <= totalPages; i++) {
+        const isSelected = insightsSelectedPages.has(i);
+        const pageData = currentReport.document_flow?.find(p => p.page_number === i);
+        const hasAnalysis = pageData?.custom_analysis &&
+            (Array.isArray(pageData.custom_analysis) ? pageData.custom_analysis.length > 0 : true);
+
+        html += `
+            <label class="insights-page-checkbox ${isSelected ? 'selected' : ''} ${hasAnalysis ? 'has-analysis' : ''}">
+                <input type="checkbox" value="${i}" ${isSelected ? 'checked' : ''}
+                    onchange="toggleInsightsPage(${i})">
+                <span class="page-num">${i}</span>
+                ${hasAnalysis ? '<i class="fas fa-brain analysis-indicator" title="Has saved analysis"></i>' : ''}
+            </label>
+        `;
+    }
+    grid.innerHTML = html;
+}
+
+// Toggle page selection
+function toggleInsightsPage(pageNum) {
+    if (insightsSelectedPages.has(pageNum)) {
+        insightsSelectedPages.delete(pageNum);
+    } else {
+        insightsSelectedPages.add(pageNum);
+    }
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
+}
+
+// Update page selection display
+function updateInsightsPageSelection() {
+    const display = document.getElementById('insights-selected-pages-display');
+    const countSpan = document.getElementById('insights-pages-selected-count');
+    const generateBtn = document.getElementById('generate-insights-btn');
+
+    if (insightsSelectedPages.size === 0) {
+        display.innerHTML = '<span class="placeholder">No pages selected</span>';
+        countSpan.textContent = '0 pages selected';
+        generateBtn.disabled = true;
+    } else {
+        const sortedPages = Array.from(insightsSelectedPages).sort((a, b) => a - b);
+        const pageRanges = compressPageNumbers(sortedPages);
+        display.innerHTML = `<span class="selected-pages-list">${pageRanges}</span>`;
+        countSpan.textContent = `${insightsSelectedPages.size} page${insightsSelectedPages.size > 1 ? 's' : ''} selected`;
+        generateBtn.disabled = false;
+    }
+
+    // Update checkbox visual states
+    document.querySelectorAll('#insights-page-grid .insights-page-checkbox').forEach(label => {
+        const checkbox = label.querySelector('input');
+        const pageNum = parseInt(checkbox.value);
+        if (insightsSelectedPages.has(pageNum)) {
+            label.classList.add('selected');
+            checkbox.checked = true;
+        } else {
+            label.classList.remove('selected');
+            checkbox.checked = false;
+        }
+    });
+}
+
+// Compress page numbers into ranges (e.g., "1-3, 5, 7-9")
+function compressPageNumbers(pages) {
+    if (pages.length === 0) return '';
+    if (pages.length === 1) return `Page ${pages[0]}`;
+
+    const ranges = [];
+    let start = pages[0];
+    let end = pages[0];
+
+    for (let i = 1; i < pages.length; i++) {
+        if (pages[i] === end + 1) {
+            end = pages[i];
+        } else {
+            ranges.push(start === end ? `${start}` : `${start}-${end}`);
+            start = pages[i];
+            end = pages[i];
+        }
+    }
+    ranges.push(start === end ? `${start}` : `${start}-${end}`);
+
+    return `Pages: ${ranges.join(', ')}`;
+}
+
+// Update saved analysis topics based on selected pages
+function updateInsightsAnalysisTopics() {
+    const container = document.getElementById('insights-analysis-topics');
+
+    if (insightsSelectedPages.size === 0) {
+        container.innerHTML = `
+            <div class="no-topics-placeholder">
+                <i class="fas fa-info-circle"></i>
+                <span>Select pages above to see available saved analyses</span>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    let hasAnyAnalysis = false;
+
+    const sortedPages = Array.from(insightsSelectedPages).sort((a, b) => a - b);
+
+    for (const pageNum of sortedPages) {
+        const pageData = currentReport.document_flow?.find(p => p.page_number === pageNum);
+        let analyses = pageData?.custom_analysis || [];
+
+        if (!Array.isArray(analyses)) {
+            analyses = [analyses];
+        }
+
+        if (analyses.length > 0) {
+            hasAnyAnalysis = true;
+            html += `<div class="analysis-topic-group">
+                <div class="topic-group-header">Page ${pageNum}</div>`;
+
+            analyses.forEach((analysis, idx) => {
+                const analysisId = `p${pageNum}_a${idx}`;
+                const isSelected = insightsSelectedAnalyses.has(analysisId);
+                const analysisType = analysis.analysis_type || 'general';
+                const timestamp = analysis.timestamp ? new Date(analysis.timestamp).toLocaleDateString() : '';
+                const preview = (analysis.content || '').substring(0, 100) + '...';
+
+                html += `
+                    <label class="analysis-topic-item ${isSelected ? 'selected' : ''}">
+                        <input type="checkbox" value="${analysisId}" ${isSelected ? 'checked' : ''}
+                            onchange="toggleInsightsAnalysis('${analysisId}')">
+                        <div class="topic-info">
+                            <span class="topic-type">${analysisType}</span>
+                            <span class="topic-date">${timestamp}</span>
+                        </div>
+                        <div class="topic-preview">${preview}</div>
+                    </label>
+                `;
+            });
+
+            html += '</div>';
+        }
+    }
+
+    if (!hasAnyAnalysis) {
+        container.innerHTML = `
+            <div class="no-topics-placeholder">
+                <i class="fas fa-info-circle"></i>
+                <span>No saved analyses found on selected pages</span>
+            </div>
+        `;
+    } else {
+        container.innerHTML = `
+            <div class="analysis-topics-header">
+                <button class="btn btn-sm btn-secondary" onclick="selectAllInsightsAnalyses()">Select All</button>
+                <button class="btn btn-sm btn-secondary" onclick="clearInsightsAnalyses()">Clear</button>
+            </div>
+            ${html}
+        `;
+    }
+}
+
+// Toggle analysis selection
+function toggleInsightsAnalysis(analysisId) {
+    if (insightsSelectedAnalyses.has(analysisId)) {
+        insightsSelectedAnalyses.delete(analysisId);
+    } else {
+        insightsSelectedAnalyses.add(analysisId);
+    }
+
+    // Update visual state
+    document.querySelectorAll('#insights-analysis-topics .analysis-topic-item').forEach(label => {
+        const checkbox = label.querySelector('input');
+        if (checkbox.value === analysisId) {
+            label.classList.toggle('selected', insightsSelectedAnalyses.has(analysisId));
+        }
+    });
+}
+
+// Select all analyses
+function selectAllInsightsAnalyses() {
+    document.querySelectorAll('#insights-analysis-topics .analysis-topic-item input').forEach(checkbox => {
+        checkbox.checked = true;
+        insightsSelectedAnalyses.add(checkbox.value);
+        checkbox.closest('.analysis-topic-item').classList.add('selected');
+    });
+}
+
+// Clear all analyses
+function clearInsightsAnalyses() {
+    insightsSelectedAnalyses.clear();
+    document.querySelectorAll('#insights-analysis-topics .analysis-topic-item').forEach(label => {
+        label.querySelector('input').checked = false;
+        label.classList.remove('selected');
+    });
+}
+
+// Page selection helpers
+function selectInsightsCurrentPage() {
+    insightsSelectedPages = new Set([currentPage]);
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
+    populateInsightsPageGrid();
+}
+
+function selectInsightsAllPages() {
+    const totalPages = currentReport?.total_pages || currentReport?.document_flow?.length || 1;
+    insightsSelectedPages = new Set(Array.from({length: totalPages}, (_, i) => i + 1));
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
+    populateInsightsPageGrid();
+}
+
+function selectInsightsPageRange() {
+    const totalPages = currentReport?.total_pages || currentReport?.document_flow?.length || 1;
+    const range = prompt(`Enter page range (e.g., "1-10" or "1,3,5-7").\nTotal pages: ${totalPages}`);
+    if (!range) return;
+
+    const newPages = new Set();
+    const parts = range.split(',').map(p => p.trim());
+
+    for (const part of parts) {
+        if (part.includes('-')) {
+            const [start, end] = part.split('-').map(n => parseInt(n.trim()));
+            if (!isNaN(start) && !isNaN(end)) {
+                for (let i = Math.max(1, start); i <= Math.min(totalPages, end); i++) {
+                    newPages.add(i);
+                }
+            }
+        } else {
+            const num = parseInt(part);
+            if (!isNaN(num) && num >= 1 && num <= totalPages) {
+                newPages.add(num);
+            }
+        }
+    }
+
+    insightsSelectedPages = newPages;
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
+    populateInsightsPageGrid();
+}
+
+function clearInsightsPageSelection() {
+    insightsSelectedPages = new Set();
+    updateInsightsPageSelection();
+    updateInsightsAnalysisTopics();
+    populateInsightsPageGrid();
 }
 
 // Close business insights modal
@@ -2375,8 +2629,14 @@ async function generateBusinessInsights() {
         return;
     }
 
+    if (insightsSelectedPages.size === 0) {
+        alert('Please select at least one page');
+        return;
+    }
+
     const businessContext = document.getElementById('business-context-input').value.trim();
-    const includeSavedAnalyses = document.getElementById('include-saved-analyses').checked;
+    const pageNumbers = Array.from(insightsSelectedPages).sort((a, b) => a - b);
+    const selectedAnalysisIds = Array.from(insightsSelectedAnalyses);
 
     const btn = document.getElementById('generate-insights-btn');
     btn.disabled = true;
@@ -2387,7 +2647,7 @@ async function generateBusinessInsights() {
         <div class="insights-loading">
             <div class="spinner"></div>
             <p>Generating business modeling insights...</p>
-            <p style="font-size: 0.85em; opacity: 0.7;">This may take up to a minute</p>
+            <p style="font-size: 0.85em; opacity: 0.7;">Analyzing ${pageNumbers.length} page(s). This may take up to a minute.</p>
         </div>
     `;
 
@@ -2396,9 +2656,10 @@ async function generateBusinessInsights() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                page_number: currentPage,
-                include_saved_analyses: includeSavedAnalyses,
-                business_context: businessContext
+                page_numbers: pageNumbers,
+                selected_analysis_ids: selectedAnalysisIds,
+                business_context: businessContext,
+                target_page: currentPage
             })
         });
 
@@ -2409,6 +2670,8 @@ async function generateBusinessInsights() {
 
         const result = await response.json();
         currentBusinessInsights = result.insights;
+        insightsGenerationResult = result;
+        insightsTargetPage = result.target_page;
 
         // Display insights
         document.getElementById('business-insights-body').innerHTML = `
@@ -2417,8 +2680,12 @@ async function generateBusinessInsights() {
             </div>
         `;
 
-        // Show copy button
-        document.getElementById('copy-insights-btn').style.display = 'inline-flex';
+        // Check if target page has existing insights
+        await checkExistingBusinessInsights(insightsTargetPage);
+
+        // Show save footer
+        document.getElementById('insights-default-footer').style.display = 'none';
+        document.getElementById('insights-save-footer').style.display = 'flex';
 
     } catch (error) {
         console.error('Business insights error:', error);
@@ -2428,9 +2695,124 @@ async function generateBusinessInsights() {
                 <p>Failed to generate insights: ${error.message}</p>
             </div>
         `;
-    } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
+    }
+}
+
+// Check for existing business insights on target page
+async function checkExistingBusinessInsights(targetPage) {
+    try {
+        const response = await fetch(`${API_BASE}/api/reports/${currentReport.report_id}/page/${targetPage}/business-insights`);
+        if (response.ok) {
+            const result = await response.json();
+            const warning = document.getElementById('existing-insights-warning');
+            const saveOptions = document.getElementById('insights-save-options');
+
+            if (result.has_insights) {
+                warning.style.display = 'flex';
+                saveOptions.style.display = 'flex';
+            } else {
+                warning.style.display = 'none';
+                saveOptions.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Error checking existing insights:', error);
+    }
+}
+
+// Regenerate business insights
+function regenerateBusinessInsights() {
+    // Show default footer again
+    document.getElementById('insights-default-footer').style.display = 'flex';
+    document.getElementById('insights-save-footer').style.display = 'none';
+    document.getElementById('insights-success-footer').style.display = 'none';
+
+    // Reset generate button
+    const btn = document.getElementById('generate-insights-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
+
+    // Clear results
+    document.getElementById('business-insights-body').innerHTML = `
+        <div class="insights-placeholder">
+            <i class="fas fa-lightbulb"></i>
+            <p>Click "Generate Insights" to extract actionable business modeling inputs from selected pages and analyses.</p>
+        </div>
+    `;
+}
+
+// Save business insights
+async function saveBusinessInsights() {
+    if (!currentBusinessInsights || !insightsGenerationResult) {
+        alert('No insights to save');
+        return;
+    }
+
+    const saveMode = document.querySelector('input[name="insights-save-mode"]:checked')?.value || 'replace';
+    const businessContext = document.getElementById('business-context-input').value.trim();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/reports/${currentReport.report_id}/save-business-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_page: insightsTargetPage,
+                insights: currentBusinessInsights,
+                page_numbers: Array.from(insightsSelectedPages),
+                selected_analysis_ids: Array.from(insightsSelectedAnalyses),
+                business_context: businessContext,
+                mode: saveMode
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save insights');
+        }
+
+        const result = await response.json();
+
+        // Show success footer
+        document.getElementById('insights-save-footer').style.display = 'none';
+        document.getElementById('insights-success-footer').style.display = 'flex';
+        document.getElementById('insights-save-success-text').textContent =
+            `Business Insights ${saveMode === 'append' ? 'appended to' : 'saved to'} Page ${insightsTargetPage}!`;
+
+        // Refresh report data to show updated insights
+        await loadReportDetails(currentReport.report_id);
+
+    } catch (error) {
+        console.error('Save insights error:', error);
+        alert('Failed to save insights: ' + error.message);
+    }
+}
+
+// Continue generating more insights
+function continueBusinessInsights() {
+    document.getElementById('insights-success-footer').style.display = 'none';
+    document.getElementById('insights-default-footer').style.display = 'flex';
+
+    // Reset generate button
+    const btn = document.getElementById('generate-insights-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-magic"></i> Generate Insights';
+
+    // Clear results
+    document.getElementById('business-insights-body').innerHTML = `
+        <div class="insights-placeholder">
+            <i class="fas fa-lightbulb"></i>
+            <p>Click "Generate Insights" to extract actionable business modeling inputs from selected pages and analyses.</p>
+        </div>
+    `;
+}
+
+// Go to saved page
+function goToInsightsSavedPage() {
+    closeBusinessInsightsModal();
+    if (insightsTargetPage && insightsTargetPage !== currentPage) {
+        goToPage(insightsTargetPage);
     }
 }
 
@@ -2467,18 +2849,23 @@ function copyBusinessInsights() {
     if (!currentBusinessInsights) return;
 
     navigator.clipboard.writeText(currentBusinessInsights).then(() => {
-        const btn = document.getElementById('copy-insights-btn');
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        btn.style.background = '#22c55e';
-        btn.style.borderColor = '#22c55e';
-        btn.style.color = 'white';
-        setTimeout(() => {
-            btn.innerHTML = originalHTML;
-            btn.style.background = '';
-            btn.style.borderColor = '';
-            btn.style.color = '';
-        }, 2000);
+        // Find any visible copy button and show feedback
+        const btns = document.querySelectorAll('#insights-save-footer .btn-secondary, #copy-insights-btn');
+        btns.forEach(btn => {
+            if (btn.textContent.includes('Copy')) {
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                btn.style.background = '#22c55e';
+                btn.style.borderColor = '#22c55e';
+                btn.style.color = 'white';
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.style.background = '';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }, 2000);
+            }
+        });
     }).catch(err => {
         console.error('Copy failed:', err);
         alert('Failed to copy to clipboard');
